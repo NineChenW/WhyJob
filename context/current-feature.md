@@ -12,25 +12,19 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature: Dashboard UI Phase 2
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Collapsible sidebar
-- Search input and tag filter
-- Company list
-- Drawer icon to open/close sidebar
-- Always a drawer on mobile view
+-
 
 ## Notes
 
-- Reference screenshot: @context/screenshots/deshboard-ui-main.png
-- Reference: @context/project-overview.md
-- Mock data: @src/lib/mock-data.ts
+-
 
 ## History
 
@@ -41,3 +35,4 @@ Earliest to latest.
 
 - **2026-05-26**: Initial Next.js and Tailwind CSS v4 setup
 - **2026-05-27**: Dashboard UI Phase 1
+- **2026-06-01**: Dashboard UI Phase 2 - collapsible sidebar with Profile menu, company list, search input, tag filter, drawer icon, and mobile drawer
