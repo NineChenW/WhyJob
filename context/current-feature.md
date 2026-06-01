@@ -12,21 +12,25 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature
-
-<!--Feature Name-->
+# Current Feature: Dashboard UI Phase 2
 
 ## Status
 
-<!--Not Started|In Progress|Completed-->
+In Progress
 
 ## Goals
 
-<!--Goals & requirements-->
+- Collapsible sidebar
+- Search input and tag filter
+- Company list
+- Drawer icon to open/close sidebar
+- Always a drawer on mobile view
 
 ## Notes
 
-<!--Any extra notes-->
+- Reference screenshot: @context/screenshots/deshboard-ui-main.png
+- Reference: @context/project-overview.md
+- Mock data: @src/lib/mock-data.ts
 
 ## History
 
