@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import type { Company } from "@/lib/db.types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -108,18 +109,21 @@ export function CompanyList({ companies }: CompanyListProps) {
               key={company.id}
               className="flex items-center gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <Link
+                  href={`/companies/${company.id}`}
+                  className="flex items-center gap-2 hover:underline"
+                >
                   <h3 className="font-medium truncate">{company.name}</h3>
                   {company.stage && (
                     <Badge variant="secondary" className="text-xs">
                       {company.stage}
                     </Badge>
                   )}
-                </div>
+                </Link>
                 <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
                   {company.industry && (
                     <span className="truncate">{company.industry}</span>
