@@ -12,7 +12,7 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature
+# Current Feature:
 
 ## Status
 
@@ -20,11 +20,7 @@ Not Started
 
 ## Goals
 
-- TBD
-
 ## Notes
-
-- TBD
 
 ## History
 
@@ -37,3 +33,4 @@ Earliest to latest.
 - **2026-05-27**: Dashboard UI Phase 1
 - **2026-06-01**: Dashboard UI Phase 2 - collapsible sidebar with Profile menu, company list, search input, tag filter, drawer icon, and mobile drawer
 - **2026-06-01**: Company View Phase 1 - company detail page with header, tracking columns, and tabbed information area
+- **2026-06-02**: Prisma + Neon PostgreSQL Setup - complete database setup with Prisma ORM, Neon serverless PostgreSQL, initial schema with all models, migrations, and database test script

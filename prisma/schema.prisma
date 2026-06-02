@@ -1,0 +1,203 @@
+// WhyJob Prisma Schema
+// Based on project-overview.md data models
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// User & Auth (NextAuth v5)
+// ============================================
+
+model User {
+  id                   String    @id @default(cuid())
+  name                 String?
+  email                String?   @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String? // bcrypt hash; null for OAuth-only accounts
+  isPro                Boolean   @default(false)
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  // JobHunter specific
+  profile         Profile?
+  companies       Company[]
+  jobDescriptions JobDescription[]
+  resumes         Resume[]
+  interviews      Interview[]
+}
+
+// NextAuth required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// JobHunter Core Models
+// ============================================
+
+// User's full profile / master resume data
+// All detailed content stored in Content table
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Companies the user is researching
+// Core metadata only; detailed content stored in Content table
+model Company {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String
+  website      String?
+  industry     String?
+  size         String? // "1-10", "11-50", etc.
+  stage        String? // "Startup", "Series A", etc.
+  headquarters String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobDescriptions JobDescription[]
+}
+
+// Job descriptions user has saved/applied to
+// Core fields only; detailed content stored in Content table
+model JobDescription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  title   String
+  url     String?
+  content String // Full job description text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resumes    Resume[]
+  interviews Interview[]
+}
+
+// Generated resumes tailored for specific jobs
+// Resume content stored as Content entries
+model Resume {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  jobDescriptionId String?
+  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
+
+  name      String
+  isPrimary Boolean @default(false)
+
+  fitScore    Float?
+  fitAnalysis String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions ResumeVersion[]
+}
+
+model ResumeVersion {
+  id       String @id @default(cuid())
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  content     String
+  changeNotes String?
+  fitScore    Float?
+
+  createdAt DateTime @default(now())
+}
+
+// Interview sessions
+// Questions stored as Content entries
+model Interview {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  jobDescriptionId String?
+  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
+
+  type   String @default("behavioral") // "behavioral" | "technical" | "system-design" | "case-study"
+  status String @default("in_progress") // "in_progress" | "completed"
+
+  overallScore Float?
+  summary      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// Content Table (Flexible Key-Value Store)
+// ============================================
+
+model Content {
+  id String @id @default(cuid())
+
+  sourceType  String // "profile" | "company" | "job" | "resume" | "interview"
+  sourceId    String
+  contentType String // Content template type (determines which parser to use)
+
+  content   String
+  sortOrder Int    @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceType, sourceId])
+}
