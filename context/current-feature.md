@@ -12,15 +12,26 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature:
+# Current Feature: Database Seed Script
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Create a seed script (`prisma/seed.ts`) to populate the database with sample data for development and demos
+- Base the seed data on the database schema (`prisma/schema.prisma`) and existing mock data (`src/lib/mock-data.ts`)
+- Include test cases to ensure the script works correctly with the database schema
+
 ## Notes
+
+### References
+
+- @context/project-overview.md
+- @src/lib/mock-data.ts
+- @prisma/schema.prisma
+- Prisma docs: https://prisma.io/docs (Prisma 7 has breaking changes - use latest documentation)
 
 ## History
 
