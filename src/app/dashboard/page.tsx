@@ -3,10 +3,13 @@ import { Input } from "@/components/ui/input";
 import { ThemeSwitch } from "@/components/layout/theme-switch";
 import { Sidebar } from "@/components/layout/sidebar";
 import { CompanyList } from "@/components/companies/company-list";
-import { mockUser, mockCompanies } from "@/lib/mock-data";
+import { mockUser } from "@/lib/mock-data";
+import { getCompanies } from "@/actions/companies";
 import { Search } from "lucide-react";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const companies = await getCompanies();
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
@@ -46,12 +49,12 @@ export default function DashboardPage() {
         <main className="flex-1 p-6 overflow-auto">
           <div className="max-w-4xl">
             <div className="mb-6">
-              <h2 className="text-2xl font-semibold">Companies</h2>
+              <h2 className="text-2xl font font-semibold">Companies</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 Manage and research your target companies
               </p>
             </div>
-            <CompanyList companies={mockCompanies} />
+            <CompanyList companies={companies} />
           </div>
         </main>
       </div>

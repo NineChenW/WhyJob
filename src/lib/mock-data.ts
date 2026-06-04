@@ -10,7 +10,7 @@ import type {
 } from "@/lib/db.types";
 
 export const mockUser: User = {
-  id: "user_1",
+  id: "user_01H8XQZ7YJZ8XQZ7YJZ8XQZ7YJ",
   name: "Alex Chen",
   email: "alex.chen@example.com",
   emailVerified: new Date("2026-01-15"),

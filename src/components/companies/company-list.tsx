@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import type { Company } from "@/lib/db.types";
+import type { Company } from "@prisma/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Globe, MapPin, Search, X } from "lucide-react";
+import { searchCompanies } from "@/actions/companies";
 
 interface CompanyListProps {
   companies: Company[];
@@ -14,31 +15,39 @@ interface CompanyListProps {
 
 export function CompanyList({ companies }: CompanyListProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [filteredCompanies, setFilteredCompanies] = useState<Company[]>(companies);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const industries = useMemo(() => {
-    const uniqueIndustries = new Set(
+  const stages = useMemo(() => {
+    const uniqueStages = new Set(
       companies
-        .map((c) => c.industry)
-        .filter((industry): industry is string => industry != null)
+        .map((c) => c.stage)
+        .filter((stage): stage is string => stage != null)
     );
-    return Array.from(uniqueIndustries).sort();
+    return Array.from(uniqueStages).sort();
   }, [companies]);
 
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((company) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        company.industry?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        company.headquarters?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Search companies server-side when query or stage changes
+  useEffect(() => {
+    const performSearch = async () => {
+      setIsLoading(true);
+      try {
+        const results = await searchCompanies({
+          query: searchQuery || undefined,
+          stage: selectedStage || undefined,
+        });
+        setFilteredCompanies(results);
+      } catch (error) {
+        console.error("Search failed:", error);
+        setFilteredCompanies(companies);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-      const matchesIndustry =
-        selectedIndustry === null || company.industry === selectedIndustry;
-
-      return matchesSearch && matchesIndustry;
-    });
-  }, [companies, searchQuery, selectedIndustry]);
+    performSearch();
+  }, [searchQuery, selectedStage, companies]);
 
   return (
     <div className="space-y-4">
@@ -51,6 +60,7 @@ export function CompanyList({ companies }: CompanyListProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 pr-10"
+            disabled={isLoading}
           />
           {searchQuery && (
             <Button
@@ -65,27 +75,25 @@ export function CompanyList({ companies }: CompanyListProps) {
           )}
         </div>
 
-        {/* Industry Filter Tags */}
+        {/* Stage Filter Tags */}
         <div className="flex flex-wrap gap-2">
           <Badge
-            variant={selectedIndustry === null ? "default" : "outline"}
+            variant={selectedStage === null ? "default" : "outline"}
             className="cursor-pointer"
-            onClick={() => setSelectedIndustry(null)}
+            onClick={() => setSelectedStage(null)}
           >
             All
           </Badge>
-          {industries.map((industry) => (
+          {stages.map((stage) => (
             <Badge
-              key={industry}
-              variant={selectedIndustry === industry ? "default" : "outline"}
+              key={stage}
+              variant={selectedStage === stage ? "default" : "outline"}
               className="cursor-pointer"
               onClick={() =>
-                setSelectedIndustry(
-                  selectedIndustry === industry ? null : industry
-                )
+                setSelectedStage(selectedStage === stage ? null : stage)
               }
             >
-              {industry}
+              {stage}
             </Badge>
           ))}
         </div>
@@ -98,7 +106,7 @@ export function CompanyList({ companies }: CompanyListProps) {
             <Building2 className="h-12 w-12 text-muted-foreground/50" />
             <p className="mt-4 text-lg font-medium">No companies found</p>
             <p className="text-sm text-muted-foreground">
-              {searchQuery || selectedIndustry
+              {searchQuery || selectedStage
                 ? "Try adjusting your search or filter"
                 : "Add your first company to get started"}
             </p>

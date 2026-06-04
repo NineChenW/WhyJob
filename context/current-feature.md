@@ -12,15 +12,22 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature:
+# Current Feature: Dashboard Company Spec
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
+- Replace dummy collection data in dashboard main area with actual database data
+- Create src/lib/db/company.ts with data fetching functions
+- Fetch companies directly in server component
+- Implement text and stage search function
+
 ## Notes
+
+Reference: @context/features/dashboard-company-spec.md
 
 ## History
 
