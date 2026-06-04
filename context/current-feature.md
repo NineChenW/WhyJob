@@ -12,22 +12,15 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature: Dashboard Company Spec
+# Current Feature:
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Replace dummy collection data in dashboard main area with actual database data
-- Create src/lib/db/company.ts with data fetching functions
-- Fetch companies directly in server component
-- Implement text and stage search function
-
 ## Notes
-
-Reference: @context/features/dashboard-company-spec.md
 
 ## History
 
@@ -42,3 +35,4 @@ Earliest to latest.
 - **2026-06-01**: Company View Phase 1 - company detail page with header, tracking columns, and tabbed information area
 - **2026-06-02**: Prisma + Neon PostgreSQL Setup - complete database setup with Prisma ORM, Neon serverless PostgreSQL, initial schema with all models, migrations, and database test script
 - **2026-06-03**: Database Seed Script - fully independent seed script with realistic development data (5 companies, 4 jobs, resumes, interviews), Prisma 7 config, and comprehensive test suite
+- **2026-06-04**: Dashboard Company Spec - replace dummy collection data with actual database data, create data fetching functions, implement text and stage search via server actions
