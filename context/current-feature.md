@@ -16,7 +16,7 @@ Do not violate any following rules:
 
 ## Status
 
-In Progress
+Completed
 
 ## Goals
 
@@ -30,10 +30,11 @@ In Progress
 - Currently description is stored as a `Content` entry with `contentType: "company_culture"`
 - New approach: save description directly in Company table as a native field
 - This simplifies queries and aligns with the schema design principle of core metadata in entity tables
-- Files to modify:
+- Files modified:
   - `prisma/schema.prisma` - Add `description String?` to Company model
   - `src/actions/companies.ts` - Update `createCompany` to save description directly
-  - `src/components/companies/create-company-dialog.tsx` - No changes needed (form already collects description)
+  - `src/lib/db.types.ts` - Add description to Company interface
+  - `src/lib/mock-data.ts` - Add description to mock companies
 
 ## History
 
@@ -50,3 +51,4 @@ Earliest to latest.
 - **2026-06-03**: Database Seed Script - fully independent seed script with realistic development data (5 companies, 4 jobs, resumes, interviews), Prisma 7 config, and comprehensive test suite
 - **2026-06-04**: Dashboard Company Spec - replace dummy collection data with actual database data, create data fetching functions, implement text and stage search via server actions
 - **2026-06-05**: Company Create (Modal Dialog) - implement "New Company" button with shadcn Dialog modal, form with Company Name, Description, Stage, and Information to Track, server action with Zod validation, database save function, and toast notifications
+- **2026-06-05**: Company Description Field - add `description` field to Company model in Prisma schema, update `createCompany` action to save directly to Company table instead of as Content entry, apply database migration
