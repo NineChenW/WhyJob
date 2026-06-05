@@ -99,33 +99,17 @@ export async function createCompany(input: CreateCompanyInput): Promise<{ succes
       const newCompany = await tx.company.create({
         data: {
           name,
+          description: description || null,
           stage,
           userId,
         },
       });
 
-      // Create content entries if needed
-      const contentEntries = [];
+      // Create content entries for selected track info types
+      const contentEntries: { sourceType: "company"; sourceId: string; contentType: string; content: string; sortOrder: number }[] = [];
 
-      // Add description as company_culture if provided
-      if (description && description.trim()) {
-        contentEntries.push({
-          sourceType: "company" as const,
-          sourceId: newCompany.id,
-          contentType: "company_culture" as const,
-          content: description.trim(),
-          sortOrder: 1,
-        });
-      }
-
-      // Add empty content entries for selected track info types
       if (trackInfo && trackInfo.length > 0) {
         trackInfo.forEach((contentType) => {
-          // Skip company_culture if we already added it from description
-          if (contentType === "company_culture" && description && description.trim()) {
-            return;
-          }
-
           contentEntries.push({
             sourceType: "company" as const,
             sourceId: newCompany.id,

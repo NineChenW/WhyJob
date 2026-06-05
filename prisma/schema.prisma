@@ -95,6 +95,7 @@ model Company {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name         String
+  description  String?
   website      String?
   industry     String?
   size         String? // "1-10", "11-50", etc.

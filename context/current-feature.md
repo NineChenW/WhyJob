@@ -16,15 +16,24 @@ Do not violate any following rules:
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
--
+- Add `description` field to Company model in Prisma schema
+- Update `createCompany` server action to save description directly to Company table
+- Run `prisma migrate dev` to apply the database migration
+- Verify the description is saved and retrieved correctly
 
 ## Notes
 
--
+- Currently description is stored as a `Content` entry with `contentType: "company_culture"`
+- New approach: save description directly in Company table as a native field
+- This simplifies queries and aligns with the schema design principle of core metadata in entity tables
+- Files to modify:
+  - `prisma/schema.prisma` - Add `description String?` to Company model
+  - `src/actions/companies.ts` - Update `createCompany` to save description directly
+  - `src/components/companies/create-company-dialog.tsx` - No changes needed (form already collects description)
 
 ## History
 

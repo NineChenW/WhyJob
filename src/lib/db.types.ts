@@ -37,6 +37,7 @@ export interface Company {
   id: string;
   userId: string;
   name: string;
+  description: string | null;
   website: string | null;
   industry: string | null;
   size: string | null;
