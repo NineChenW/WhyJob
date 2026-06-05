@@ -12,30 +12,19 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature: Company Create (Modal Dialog)
+# Current Feature
 
 ## Status
 
-Completed
+Not Started
 
 ## Goals
 
-- Implement "New Company" button in the dashboard top bar that opens a shadcn Dialog modal
-- Create form in modal with:
-  - Company Name (required field)
-  - Description field
-  - Tags (stage) selection
-  - Information to Track (multiple selections allowed, mapped to company content types)
-- Implement server action `createCompany` with Zod input validation
-- Add database save function `createCompany` in `src/lib/db/company.ts`
-- Show toast notification on successful creation, close modal, and refresh company list
-- Follow existing patterns for server actions and database operations
+-
 
 ## Notes
 
-- Uses shadcn/ui Dialog component
-- Follows Content table pattern for company content types
-- References: @context/screenshots/dashboard-add-company-1.png, @context/screenshots/dashboard-add-company-2.png
+-
 
 ## History
 
