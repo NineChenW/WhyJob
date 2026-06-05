@@ -3,10 +3,11 @@ import Link from "next/link";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ThemeSwitch } from "@/components/layout/theme-switch";
 import { CompanyView } from "@/components/companies/company-view";
-import { mockCompanies, mockCompanyContents, mockUser } from "@/lib/mock-data";
+import { getCompanyById, getCompanyContents } from "@/actions/companies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, ArrowLeft } from "lucide-react";
+import { mockUser } from "@/lib/mock-data";
 
 interface CompanyPageProps {
   params: Promise<{ id: string }>;
@@ -14,16 +15,14 @@ interface CompanyPageProps {
 
 export default async function CompanyPage({ params }: CompanyPageProps) {
   const { id } = await params;
-  const company = mockCompanies.find((c) => c.id === id);
+  const company = await getCompanyById(id);
 
   if (!company) {
     notFound();
   }
 
   // Get company contents for this specific company
-  const companyContents = mockCompanyContents.filter(
-    (c) => c.sourceId === company.id
-  );
+  const companyContents = await getCompanyContents(company.id);
 
   return (
     <div className="flex h-full">

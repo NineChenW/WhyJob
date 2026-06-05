@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Company, Content } from "@/lib/db.types";
+import { parseContent } from "@/lib/parsers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,10 +13,9 @@ import {
   Trash2,
   Users,
   Briefcase,
-  GraduationCap,
   Calendar,
   ExternalLink,
-  ChevronRight,
+  MessageSquare,
 } from "lucide-react";
 
 interface CompanyViewProps {
@@ -23,7 +23,7 @@ interface CompanyViewProps {
   contents: Content[];
 }
 
-type TabId = "basic" | "website" | "culture" | "jobs";
+type TabId = "basic" | "website" | "culture" | "jobs" | "wechat";
 
 interface Tab {
   id: TabId;
@@ -35,23 +35,27 @@ const tabs: Tab[] = [
   { id: "website", label: "Official Website" },
   { id: "culture", label: "Company Culture" },
   { id: "jobs", label: "Recent Job Posting" },
+  { id: "wechat", label: "WeChat Account" },
 ];
 
-// Helper to get content by type
-function getContentByType(
+// Helper to get and parse content by type
+function getParsedContentByType<T = string>(
   contents: Content[],
   contentType: string
-): Content | undefined {
-  return contents.find((c) => c.contentType === contentType);
+): T | undefined {
+  const content = contents.find((c) => c.contentType === contentType);
+  if (!content) return undefined;
+  return parseContent<T>(contentType, content.content);
 }
 
 export function CompanyView({ company, contents }: CompanyViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("basic");
 
   // Get culture and news content
-  const cultureContent = getContentByType(contents, "company_culture");
-  const newsContent = getContentByType(contents, "company_news");
-  const hiringContent = getContentByType(contents, "company_hiring_trends");
+  const cultureContent = getParsedContentByType(contents, "company_culture");
+  const newsContent = getParsedContentByType(contents, "company_news");
+  const hiringContent = getParsedContentByType(contents, "company_hiring_trends");
+  const wechatContent = getParsedContentByType(contents, "company_wechat");
 
   return (
     <div className="max-w-5xl">
@@ -162,15 +166,21 @@ export function CompanyView({ company, contents }: CompanyViewProps) {
           {activeTab === "culture" && (
             <div className="space-y-6">
               <CultureSection
-                culture={cultureContent?.content}
-                news={newsContent?.content}
+                culture={cultureContent}
+                news={newsContent}
               />
             </div>
           )}
 
           {activeTab === "jobs" && (
             <div className="space-y-6">
-              <JobPostingSection hiringTrends={hiringContent?.content} />
+              <JobPostingSection hiringTrends={hiringContent} />
+            </div>
+          )}
+
+          {activeTab === "wechat" && (
+            <div className="space-y-6">
+              <WeChatSection wechatAccount={wechatContent} />
             </div>
           )}
         </div>
@@ -295,6 +305,23 @@ function JobPostingSection({ hiringTrends }: { hiringTrends?: string }) {
         </div>
       ) : (
         <p className="text-muted-foreground">No job posting information available.</p>
+      )}
+    </div>
+  );
+}
+
+// WeChat Section
+function WeChatSection({ wechatAccount }: { wechatAccount?: string }) {
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-4">WeChat Official Account</h3>
+      {wechatAccount ? (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
+          <MessageSquare className="h-5 w-5 text-muted-foreground mt-0.5" />
+          <p className="text-muted-foreground leading-relaxed">{wechatAccount}</p>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">No WeChat account information available.</p>
       )}
     </div>
   );

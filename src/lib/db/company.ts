@@ -12,11 +12,11 @@ export async function getCompaniesByUserId(userId: string): Promise<Company[]> {
 }
 
 /**
- * Get a company by ID
+ * Get a company by ID for the current user
  */
-export async function getCompanyById(id: string): Promise<Company | null> {
+export async function getCompanyById(id: string, userId: string): Promise<Company | null> {
   return prisma.company.findUnique({
-    where: { id },
+    where: { id, userId },
   });
 }
 

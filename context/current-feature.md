@@ -12,15 +12,30 @@ Do not violate any following rules:
 7. Update goals section with current feature requirements.
 8. Update notes section with current feature references.
 
-# Current Feature:
+# Current Feature: Company Create (Modal Dialog)
 
 ## Status
 
-Not Started
+Completed
 
 ## Goals
 
+- Implement "New Company" button in the dashboard top bar that opens a shadcn Dialog modal
+- Create form in modal with:
+  - Company Name (required field)
+  - Description field
+  - Tags (stage) selection
+  - Information to Track (multiple selections allowed, mapped to company content types)
+- Implement server action `createCompany` with Zod input validation
+- Add database save function `createCompany` in `src/lib/db/company.ts`
+- Show toast notification on successful creation, close modal, and refresh company list
+- Follow existing patterns for server actions and database operations
+
 ## Notes
+
+- Uses shadcn/ui Dialog component
+- Follows Content table pattern for company content types
+- References: @context/screenshots/dashboard-add-company-1.png, @context/screenshots/dashboard-add-company-2.png
 
 ## History
 
@@ -36,3 +51,4 @@ Earliest to latest.
 - **2026-06-02**: Prisma + Neon PostgreSQL Setup - complete database setup with Prisma ORM, Neon serverless PostgreSQL, initial schema with all models, migrations, and database test script
 - **2026-06-03**: Database Seed Script - fully independent seed script with realistic development data (5 companies, 4 jobs, resumes, interviews), Prisma 7 config, and comprehensive test suite
 - **2026-06-04**: Dashboard Company Spec - replace dummy collection data with actual database data, create data fetching functions, implement text and stage search via server actions
+- **2026-06-05**: Company Create (Modal Dialog) - implement "New Company" button with shadcn Dialog modal, form with Company Name, Description, Stage, and Information to Track, server action with Zod validation, database save function, and toast notifications

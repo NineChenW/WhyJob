@@ -83,6 +83,7 @@ Example v4 configuration:
 - Server components fetch directly with Prisma
 - Client components use Server Actions
 - Validate all inputs with Zod
+- Use the `@src/lib/auth/session.ts` to get the current user id - The page and component layer don't notice the user id, only the action layer handles the auth and use the current user id for data fetching
 
 ## Error Handling
 

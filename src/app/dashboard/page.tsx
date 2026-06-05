@@ -1,8 +1,8 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeSwitch } from "@/components/layout/theme-switch";
 import { Sidebar } from "@/components/layout/sidebar";
 import { CompanyList } from "@/components/companies/company-list";
+import { CreateCompanyDialog } from "@/components/companies/create-company-dialog";
 import { mockUser } from "@/lib/mock-data";
 import { getCompanies } from "@/actions/companies";
 import { Search } from "lucide-react";
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Button>New Company</Button>
+            <CreateCompanyDialog />
             <ThemeSwitch />
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground hidden sm:inline">
