@@ -1,51 +1,33 @@
-# Update Rules
-
-!!! Read this before update. !!!
-Do not violate any following rules:
-
-1. Please keep all the comments stay the same.
-2. Do not delete the existing history records.
-3. Only add a new history record at the end of this file after a feature is stetted completed.
-4. Fill the current feature area with the current active feature title.
-5. Update status to "In Progress" when starting a new feature.
-6. Update status to "Completed" when finishing a feature.
-7. Update goals section with current feature requirements.
-8. Update notes section with current feature references.
-
 # Current Feature
 
 ## Status
 
-Completed
+In Progress
 
 ## Goals
 
-- Add `description` field to Company model in Prisma schema
-- Update `createCompany` server action to save description directly to Company table
-- Run `prisma migrate dev` to apply the database migration
-- Verify the description is saved and retrieved correctly
+- Add "Add Batch Company(Excel)" button to top bar
+- Implement shadcn Dialog with column mapping UI
+- Column mapping: check to select from available columns, drag to reorder selected
+- Support column index configuration (A, B, AA, etc.)
+- Set parsing begin/end row numbers
+- File upload with drag-and-drop, xlsx only, ≤10MB
+- Preview uploaded file before import
 
 ## Notes
 
-- Currently description is stored as a `Content` entry with `contentType: "company_culture"`
-- New approach: save description directly in Company table as a native field
-- This simplifies queries and aligns with the schema design principle of core metadata in entity tables
-- Files modified:
-  - `prisma/schema.prisma` - Add `description String?` to Company model
-  - `src/actions/companies.ts` - Update `createCompany` to save description directly
-  - `src/lib/db.types.ts` - Add description to Company interface
-  - `src/lib/mock-data.ts` - Add description to mock companies
+- Spec: @context/features/company-batch-create-dialog-spec.md
+- References:
+  - @context/screenshots/dashboar-import-companies-from-excel-1.png
+  - @context/screenshots/dashboar-import-companies-from-excel-2.png
+- Company Name is required; other columns (description, stage, etc.) are optional
+- Use shadcn Dialog component for modal
 
 ## History
 
-<!--
-Keep this updated.
-Earliest to latest.
--->
-
 - **2026-05-26**: Initial Next.js and Tailwind CSS v4 setup
 - **2026-05-27**: Dashboard UI Phase 1
-- **2026-06-01**: Dashboard UI Phase 2 - collapsible sidebar with Profile menu, company list, search input, tag filter, drawer icon, and mobile drawer
+- **2026-05-27**: Dashboard UI Phase 2 - collapsible sidebar with Profile menu, company list, search input, tag filter, drawer icon, and mobile drawer
 - **2026-06-01**: Company View Phase 1 - company detail page with header, tracking columns, and tabbed information area
 - **2026-06-02**: Prisma + Neon PostgreSQL Setup - complete database setup with Prisma ORM, Neon serverless PostgreSQL, initial schema with all models, migrations, and database test script
 - **2026-06-03**: Database Seed Script - fully independent seed script with realistic development data (5 companies, 4 jobs, resumes, interviews), Prisma 7 config, and comprehensive test suite

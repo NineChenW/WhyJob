@@ -470,37 +470,37 @@ model Content {
 
 ### Content Types Reference
 
-| sourceType | contentType | Description | Parser |
-|------------|-------------|-------------|--------|
-| **Profile** | | | |
-| | `profile_summary` | Professional summary | TextParser |
-| | `profile_skill` | Skills (technical, soft, languages) | JsonParser |
-| | `job_experience` | Work history entry | JobExperienceParser |
-| | `project_experience` | Project entry | ProjectExperienceParser |
-| | `education` | Education entry | EducationParser |
-| | `achievement` | Achievement entry | AchievementParser |
-| | `certification` | Certification entry | CertificationParser |
-| **Company** | | | |
-| | `company_culture` | Culture notes | TextParser |
-| | `company_news` | Recent news | TextParser |
-| | `company_wechat` | WeChat account | TextParser |
-| | `company_hiring_trends` | Hiring trends | TextParser |
-| **Job** | | | |
-| | `job_requirement` | Job requirement | TextParser |
-| | `job_responsibility` | Job responsibility | TextParser |
-| | `job_salary` | Salary range | TextParser |
-| | `job_location` | Job location | TextParser |
-| | `job_remote_policy` | Remote work policy | TextParser |
-| **Resume** | | | |
-| | `resume_summary` | Resume summary section | TextParser |
-| | `resume_experience` | Experience section | ResumeExperienceParser |
-| | `resume_skills` | Skills section | JsonParser |
-| | `resume_education` | Education section | ResumeEducationParser |
-| **Interview** | | | |
-| | `interview_question` | Interview question | QuestionParser |
-| | `interview_answer` | User's answer | TextParser |
-| | `interview_polished_answer` | AI-polished answer | TextParser |
-| | `interview_feedback` | AI feedback on answer | TextParser |
+| sourceType    | contentType                 | Description                         | Parser                  |
+| ------------- | --------------------------- | ----------------------------------- | ----------------------- |
+| **Profile**   |                             |                                     |                         |
+|               | `profile_summary`           | Professional summary                | TextParser              |
+|               | `profile_skill`             | Skills (technical, soft, languages) | JsonParser              |
+|               | `job_experience`            | Work history entry                  | JobExperienceParser     |
+|               | `project_experience`        | Project entry                       | ProjectExperienceParser |
+|               | `education`                 | Education entry                     | EducationParser         |
+|               | `achievement`               | Achievement entry                   | AchievementParser       |
+|               | `certification`             | Certification entry                 | CertificationParser     |
+| **Company**   |                             |                                     |                         |
+|               | `company_culture`           | Culture notes                       | TextParser              |
+|               | `company_news`              | Recent news                         | TextParser              |
+|               | `company_wechat`            | WeChat account                      | TextParser              |
+|               | `company_hiring_trends`     | Hiring trends                       | TextParser              |
+| **Job**       |                             |                                     |                         |
+|               | `job_requirement`           | Job requirement                     | TextParser              |
+|               | `job_responsibility`        | Job responsibility                  | TextParser              |
+|               | `job_salary`                | Salary range                        | TextParser              |
+|               | `job_location`              | Job location                        | TextParser              |
+|               | `job_remote_policy`         | Remote work policy                  | TextParser              |
+| **Resume**    |                             |                                     |                         |
+|               | `resume_summary`            | Resume summary section              | TextParser              |
+|               | `resume_experience`         | Experience section                  | ResumeExperienceParser  |
+|               | `resume_skills`             | Skills section                      | JsonParser              |
+|               | `resume_education`          | Education section                   | ResumeEducationParser   |
+| **Interview** |                             |                                     |                         |
+|               | `interview_question`        | Interview question                  | QuestionParser          |
+|               | `interview_answer`          | User's answer                       | TextParser              |
+|               | `interview_polished_answer` | AI-polished answer                  | TextParser              |
+|               | `interview_feedback`        | AI feedback on answer               | TextParser              |
 
 ---
 
@@ -663,13 +663,14 @@ jobhunter/
 │   │   ├── companies.ts                # Company CRUD
 │   │   ├── jobs.ts                     # Job CRUD
 │   │   ├── resumes.ts                  # Resume CRUD
-│   │   └── interviews.ts              # Interview CRUD
+│   │   └── interviews.ts               # Interview CRUD
 │   ├── agents/                         # AI Sub-agents
-│   │   ├── company-research-agent.ts  # Scrapes company data
+│   │   ├── company-research-agent.ts   # Scrapes company data
 │   │   ├── resume-fit-agent.ts         # Analyzes resume fit
 │   │   ├── resume-generation-agent.ts  # Generates tailored resume
 │   │   └── interview-agent.ts          # Generates & reviews answers
 │   └── types/                          # TypeScript types
+│   └── schemas/                        # Configs,Types, etc. That be used of both client side(Page, Component) and server side(action)
 ├── prisma/
 │   ├── schema.prisma
 │   ├── migrations/
