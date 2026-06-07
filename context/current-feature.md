@@ -1,27 +1,33 @@
-# Current Feature
+# Current Feature: Company Batch Create
 
 ## Status
 
-In Progress
+Complete
 
 ## Goals
 
-- Add "Add Batch Company(Excel)" button to top bar
-- Implement shadcn Dialog with column mapping UI
-- Column mapping: check to select from available columns, drag to reorder selected
-- Support column index configuration (A, B, AA, etc.)
-- Set parsing begin/end row numbers
-- File upload with drag-and-drop, xlsx only, ≤10MB
-- Preview uploaded file before import
+- Implement server action `createBatchCompanies` with Zod validation
+- Create query function `queryCompanyByNames` in `lib/db/company.ts` to check company uniqueness for user
+- Create save function `createBatchCompanies` in `lib/db/company.ts` (limited to 10 companies at once, with transaction)
+- Implement parsing and processing logic:
+  - Toast error messages with specific row and column numbers for validation failures
+  - Ensure existing content between configured begin and end row numbers
+  - Validate column format and content based on selected column configuration
+- Implement asynchronous processing:
+  - Stream read from upload file
+  - Pick selected column content and structure each row into company type instance
+  - Batch process in chunks of 10 or at end row:
+    - Check user company uniqueness and filter existing instances
+    - Batch insert legal data to DB
+- Toast on success, close modal, and refresh
 
 ## Notes
 
-- Spec: @context/features/company-batch-create-dialog-spec.md
-- References:
-  - @context/screenshots/dashboar-import-companies-from-excel-1.png
-  - @context/screenshots/dashboar-import-companies-from-excel-2.png
-- Company Name is required; other columns (description, stage, etc.) are optional
-- Use shadcn Dialog component for modal
+- Server action should handle Zod validation
+- Database operations must use transactions for batch inserts
+- Limited to 10 companies per batch operation
+- Need to handle Excel file parsing and column mapping
+- Error messages should be specific (row/column level)
 
 ## History
 
@@ -34,3 +40,5 @@ In Progress
 - **2026-06-04**: Dashboard Company Spec - replace dummy collection data with actual database data, create data fetching functions, implement text and stage search via server actions
 - **2026-06-05**: Company Create (Modal Dialog) - implement "New Company" button with shadcn Dialog modal, form with Company Name, Description, Stage, and Information to Track, server action with Zod validation, database save function, and toast notifications
 - **2026-06-05**: Company Description Field - add `description` field to Company model in Prisma schema, update `createCompany` action to save directly to Company table instead of as Content entry, apply database migration
+- **2026-06-06**: Company Batch Import Dialog - implement 3-step wizard for Excel import with column mapping, drag-and-drop reordering, file upload, and preview
+- **2026-06-07**: Company Batch Create - implement server action `batchImportCompanies` with Zod validation, query function `queryCompanyByNames`, save function `createBatchCompanies` (10-limit, transaction), Excel parsing with column mapping, error toast with row numbers, and batch import working end-to-end

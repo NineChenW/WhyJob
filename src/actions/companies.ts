@@ -4,13 +4,14 @@ import { z } from "zod";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/auth/session";
+import { queryCompanyByNames, createBatchCompanies } from "@/lib/db/company";
 import type { Company, Content } from "@prisma/client";
+import { getColumnIndex } from "@/lib/excel";
 import {
   createCompanySchema,
-  type CreateCompanyInput,
   batchImportCompaniesSchema,
   type BatchImportCompaniesInput,
-  type ColumnMapping,
+  type CreateCompanyInput,
 } from "@/schemas/company";
 
 const searchCompaniesSchema = z.object({
@@ -172,6 +173,11 @@ export async function batchImportCompanies(
     // Convert sheet to array of arrays (raw data)
     const rawData = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1 });
 
+    // Validate that there is data in the file
+    if (!rawData || rawData.length === 0) {
+      return { success: false, error: "The uploaded file is empty or could not be parsed." };
+    }
+
     // Get actual end row (use provided or last row with data)
     const actualEndRow = endRow ?? rawData.length;
 
@@ -180,64 +186,115 @@ export async function batchImportCompanies(
       return { success: false, error: "Start row cannot be greater than end row" };
     }
 
+    if (startRow < 1) {
+      return { success: false, error: "Start row must be at least 1" };
+    }
+
     // Extract relevant rows (convert to 0-indexed)
     const dataRows = rawData.slice(startRow - 1, actualEndRow);
 
-    // Convert Excel column letters to indexes (A=0, B=1, ..., AA=26)
-    const getColumnIndex = (col: string): number => {
-      let index = 0;
-      for (let i = 0; i < col.length; i++) {
-        index = index * 26 + (col.charCodeAt(i) - 64); // A=1, B=2, etc.
-      }
-      return index - 1; // Convert to 0-index
-    };
+    // Validate that there is data in the selected range
+    if (dataRows.length === 0) {
+      return {
+        success: false,
+        error: `No data found between row ${startRow} and ${actualEndRow}. Please check your row settings.`,
+      };
+    }
 
-    // Parse rows into company objects
-    const companiesToCreate = dataRows.map((row) => {
+    // Parse rows into company objects with validation
+    const companiesToCreate: Array<
+      Omit<Company, "id" | "userId" | "createdAt" | "updatedAt">
+    > = [];
+    const errors: string[] = [];
+
+    dataRows.forEach((row, rowIndex) => {
+      const actualRowNumber = startRow + rowIndex;
       const company: any = {};
+      let hasRequiredFields = false;
+
       columnMappings.forEach(({ column, excelColumn }) => {
         const colIndex = getColumnIndex(excelColumn.toUpperCase());
-        if (row[colIndex] !== undefined && row[colIndex] !== null) {
-          company[column] = String(row[colIndex]).trim();
+        const cellValue = row[colIndex];
+
+        if (cellValue !== undefined && cellValue !== null) {
+          company[column] = String(cellValue).trim();
+
+          // Check if this is the required name field
+          if (column === "name" && company[column]) {
+            hasRequiredFields = true;
+          }
         }
       });
-      return company;
+
+      // Validate that required fields exist
+      if (!hasRequiredFields) {
+        errors.push(
+          `Row ${actualRowNumber}: Missing required Company Name. Please check your column mapping.`
+        );
+      } else {
+        companiesToCreate.push(company);
+      }
     });
 
-    // Filter out rows without company name (required)
-    const validCompanies = companiesToCreate.filter((c) => c.name && c.name.trim() !== "");
+    // Return validation errors if any
+    if (errors.length > 0) {
+      return {
+        success: false,
+        error: errors[0], // Return first error for simplicity
+      };
+    }
 
-    if (validCompanies.length === 0) {
+    if (companiesToCreate.length === 0) {
       return {
         success: false,
         error: "No valid companies found in the selected rows. Ensure Company Name column is mapped correctly.",
       };
     }
 
-    // Create companies in transaction
-    const createdCompanies = await prisma.$transaction(async (tx) => {
-      const results: Company[] = [];
+    // Check for duplicate company names in the current batch
+    const batchNames = companiesToCreate.map((c) => c.name.toLowerCase());
+    const duplicateNamesInBatch = batchNames.filter(
+      (name, index) => batchNames.indexOf(name) !== index
+    );
 
-      for (const companyData of validCompanies) {
-        // Create company record
-        const newCompany = await tx.company.create({
-          data: {
-            ...companyData,
-            userId,
-          },
-        });
-        results.push(newCompany);
-      }
+    if (duplicateNamesInBatch.length > 0) {
+      return {
+        success: false,
+        error: `Duplicate company names found in the uploaded file: ${[...new Set(duplicateNamesInBatch)].join(", ")}`,
+      };
+    }
 
-      return results;
-    });
+    // Check for existing companies in the database
+    const existingNames = await queryCompanyByNames(userId, companiesToCreate.map((c) => c.name));
 
-    // Return preview data if requested, or success result
+    // Filter out companies that already exist
+    const newCompaniesToCreate = companiesToCreate.filter(
+      (c) => !existingNames.has(c.name.toLowerCase())
+    );
+
+    if (newCompaniesToCreate.length === 0) {
+      return {
+        success: false,
+        error: "All companies in the file already exist in your database.",
+      };
+    }
+
+    // Create companies in batches of 10
+    const BATCH_SIZE = 10;
+    const allCreatedCompanies: Company[] = [];
+
+    for (let i = 0; i < newCompaniesToCreate.length; i += BATCH_SIZE) {
+      const batch = newCompaniesToCreate.slice(i, i + BATCH_SIZE);
+      const created = await createBatchCompanies(userId, batch);
+      allCreatedCompanies.push(...created);
+    }
+
+    // Return success result
     return {
       success: true,
-      companies: createdCompanies,
-      totalProcessed: validCompanies.length,
-      totalCreated: createdCompanies.length,
+      companies: allCreatedCompanies,
+      totalProcessed: companiesToCreate.length,
+      totalCreated: allCreatedCompanies.length,
       preview: {
         headers: rawData[0] || [],
         rows: dataRows.slice(0, 5), // First 5 rows for preview
@@ -245,6 +302,15 @@ export async function batchImportCompanies(
     };
   } catch (error) {
     console.error("Error batch importing companies:", error);
+
+    // Handle specific error types
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: `Validation error: ${error.issues[0].message}`,
+      };
+    }
+
     return {
       success: false,
       error: "Failed to import companies. Please check your file and mapping configuration.",
