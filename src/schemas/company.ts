@@ -5,6 +5,16 @@ export const createCompanySchema = z.object({
   description: z.string().optional(),
   stage: z.string().optional(),
   trackInfo: z.array(z.enum(["company_culture", "company_news", "company_wechat", "company_hiring_trends"])).optional(),
+  // New columns
+  name_en: z.string().optional(),
+  register_address: z.string().optional(),
+  register_post_code: z.string().optional(),
+  province: z.string().optional(),
+  city: z.string().optional(),
+  district: z.string().optional(),
+  company_size: z.string().optional(),
+  establishment_date: z.string().optional(), // yyyy-MM-dd format
+  enterprise_type: z.string().optional(),
 });
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
@@ -18,6 +28,16 @@ export const companyColumnSchema = z.enum([
   "size",
   "stage",
   "headquarters",
+  // New columns
+  "name_en",
+  "register_address",
+  "register_post_code",
+  "province",
+  "city",
+  "district",
+  "company_size",
+  "establishment_date",
+  "enterprise_type",
 ]);
 
 export type CompanyColumn = z.infer<typeof companyColumnSchema>;

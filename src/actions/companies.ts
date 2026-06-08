@@ -99,7 +99,21 @@ export async function createCompany(input: CreateCompanyInput): Promise<{ succes
     const validatedInput = createCompanySchema.parse(input);
     const userId = await getCurrentUserId();
 
-    const { name, description, stage, trackInfo } = validatedInput;
+    const {
+      name,
+      description,
+      stage,
+      trackInfo,
+      name_en,
+      register_address,
+      register_post_code,
+      province,
+      city,
+      district,
+      company_size,
+      establishment_date,
+      enterprise_type,
+    } = validatedInput;
 
     // Create company in transaction
     const company = await prisma.$transaction(async (tx) => {
@@ -110,6 +124,16 @@ export async function createCompany(input: CreateCompanyInput): Promise<{ succes
           description: description || null,
           stage,
           userId,
+          // New columns
+          name_en: name_en || null,
+          register_address: register_address || null,
+          register_post_code: register_post_code || null,
+          province: province || null,
+          city: city || null,
+          district: district || null,
+          company_size: company_size || null,
+          establishment_date: establishment_date ? new Date(establishment_date) : null,
+          enterprise_type: enterprise_type || null,
         },
       });
 
@@ -217,7 +241,23 @@ export async function batchImportCompanies(
         const cellValue = row[colIndex];
 
         if (cellValue !== undefined && cellValue !== null) {
-          company[column] = String(cellValue).trim();
+          // Handle establishment_date - convert Excel serial date to ISO-8601 DateTime
+          if (column === "establishment_date") {
+            const excelDate = Number(cellValue);
+            if (!isNaN(excelDate) && excelDate > 0) {
+              // Excel serial date: days since 1900-01-01 (with leap year bug)
+              const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+              company[column] = jsDate.toISOString().slice(0, 19) + "Z";
+            } else {
+              // Try parsing as string (yyyy-MM-dd format) and convert to ISO-8601
+              const dateStr = String(cellValue).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                company[column] = dateStr + "T00:00:00Z";
+              }
+            }
+          } else {
+            company[column] = String(cellValue).trim();
+          }
 
           // Check if this is the required name field
           if (column === "name" && company[column]) {

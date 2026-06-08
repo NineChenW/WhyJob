@@ -1,0 +1,9 @@
+-- Add new columns to Company table
+ALTER TABLE "Company" ADD COLUMN "name_en" TEXT;
+ALTER TABLE "Company" ADD COLUMN "register_address" TEXT;
+ALTER TABLE "Company" ADD COLUMN "register_post_code" TEXT;
+ALTER TABLE "Company" ADD COLUMN "province" TEXT;
+ALTER TABLE "Company" ADD COLUMN "city" TEXT;
+ALTER TABLE "Company" ADD COLUMN "district" TEXT;
+ALTER TABLE "Company" ADD COLUMN "company_size" TEXT;
+ALTER TABLE "Company" ADD COLUMN "establishment_date" TIMESTAMP(3);

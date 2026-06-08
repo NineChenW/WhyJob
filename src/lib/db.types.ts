@@ -43,6 +43,16 @@ export interface Company {
   size: string | null;
   stage: string | null;
   headquarters: string | null;
+  // New columns
+  name_en: string | null;
+  register_address: string | null;
+  register_post_code: string | null;
+  province: string | null;
+  city: string | null;
+  district: string | null;
+  company_size: string | null;
+  establishment_date: Date | null;
+  enterprise_type: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

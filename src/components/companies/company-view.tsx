@@ -216,11 +216,20 @@ function TrackingCard({
 function BasicInfoSection({ company }: { company: Company }) {
   const infoItems = [
     { label: "Company Name", value: company.name },
+    { label: "English Name", value: company.name_en || "—" },
+    { label: "Enterprise Type", value: company.enterprise_type || "—" },
     { label: "Industry", value: company.industry || "—" },
     { label: "Stage", value: company.stage || "—" },
-    { label: "Size", value: company.size || "—" },
+    { label: "Company Size", value: company.size || "—" },
     { label: "Headquarters", value: company.headquarters || "—" },
     { label: "Website", value: company.website || "—" },
+    { label: "Province", value: company.province || "—" },
+    { label: "City", value: company.city || "—" },
+    { label: "District", value: company.district || "—" },
+    { label: "Register Address", value: company.register_address || "—" },
+    { label: "Register Post Code", value: company.register_post_code || "—" },
+    { label: "Company Size (Description)", value: company.company_size || "—" },
+    { label: "Establishment Date", value: company.establishment_date ? company.establishment_date.toLocaleDateString() : "—" },
   ];
 
   return (

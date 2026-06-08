@@ -101,6 +101,61 @@ const AVAILABLE_COLUMNS: {
     description: "Company headquarters location",
     required: false,
   },
+  // New columns
+  {
+    value: "name_en",
+    label: "English Name",
+    description: "Company name in English",
+    required: false,
+  },
+  {
+    value: "register_address",
+    label: "Register Address",
+    description: "Registered company address",
+    required: false,
+  },
+  {
+    value: "register_post_code",
+    label: "Register Post Code",
+    description: "Postal code of registered address",
+    required: false,
+  },
+  {
+    value: "province",
+    label: "Province",
+    description: "Province of company address",
+    required: false,
+  },
+  {
+    value: "city",
+    label: "City",
+    description: "City of company address",
+    required: false,
+  },
+  {
+    value: "district",
+    label: "District",
+    description: "District of company address",
+    required: false,
+  },
+  {
+    value: "company_size",
+    label: "Company Size (Description)",
+    description: "Description of company size (e.g., 100-500 employees)",
+    required: false,
+  },
+  {
+    value: "establishment_date",
+    label: "Establishment Date",
+    description: "Company establishment date (yyyy-MM-dd or Excel date serial)",
+    required: false,
+  },
+  {
+    value: "enterprise_type",
+    label: "Enterprise Type",
+    description: "Type of enterprise (e.g., LLC, Corporation)",
+    required: false,
+  },
 ];
 
 // Sortable item component for reordering columns

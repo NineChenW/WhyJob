@@ -102,6 +102,17 @@ model Company {
   stage        String? // "Startup", "Series A", etc.
   headquarters String?
 
+  // New columns for company details
+  name_en             String?
+  register_address    String?
+  register_post_code  String?
+  province            String?
+  city                String?
+  district            String?
+  company_size        String?
+  establishment_date  DateTime?
+  enterprise_type     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

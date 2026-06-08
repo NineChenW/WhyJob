@@ -82,6 +82,15 @@ export function CreateCompanyDialog() {
       description: "",
       stage: "",
       trackInfo: [],
+      name_en: "",
+      register_address: "",
+      register_post_code: "",
+      province: "",
+      city: "",
+      district: "",
+      company_size: "",
+      establishment_date: "",
+      enterprise_type: "",
     },
   });
 
@@ -92,7 +101,6 @@ export function CreateCompanyDialog() {
       if (result.success) {
         setOpen(false);
         form.reset();
-        // Refresh the page to show new company
         router.refresh();
         toast.success("Company created successfully!");
       } else {
@@ -121,142 +129,293 @@ export function CreateCompanyDialog() {
         <Plus className="h-4 w-4 mr-2" />
         New Company
       </Button>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add New Company</DialogTitle>
           <DialogDescription>
             Enter the company details and select what information you want to track.
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Stripe, Linear, Vercel" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Brief description of the company, what they do, or any notes you have"
-                      className="resize-none min-h-[80px]"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    This will be saved as the initial company culture notes.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        {/* Scrollable form area */}
+        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-4">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Basic Information</h3>
 
-            <FormField
-              control={form.control}
-              name="stage"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company Stage</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select company stage" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {STAGE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Stripe, Linear, Vercel" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div className="space-y-4">
-              <FormLabel>Information to Track</FormLabel>
-              <FormDescription>
-                Select the types of information you want to track for this company.
-              </FormDescription>
-              <div className="space-y-3">
-                {TRACK_OPTIONS.map((option) => (
-                  <FormField
-                    key={option.id}
-                    control={form.control}
-                    name="trackInfo"
-                    render={({ field }) => {
-                      return (
-                        <FormItem
-                          key={option.id}
-                          className="flex flex-row items-start space-x-3 space-y-0"
-                        >
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value?.includes(option.id as any)}
-                              onCheckedChange={(checked) => {
-                                return checked
-                                  ? field.onChange([...(field.value || []), option.id])
-                                  : field.onChange(
-                                      field.value?.filter((value: string) => value !== option.id)
-                                    );
-                              }}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel className="font-normal">
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Brief description of the company, what they do, or any notes you have"
+                          className="resize-none min-h-[60px]"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="stage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Stage</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select company stage" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {STAGE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
                               {option.label}
-                            </FormLabel>
-                            <FormDescription className="text-xs">
-                              {option.description}
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      );
-                    }}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Company Details */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Company Details</h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name_en"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>English Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Company name in English" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                ))}
-              </div>
-              <FormMessage />
-            </div>
+                  <FormField
+                    control={form.control}
+                    name="enterprise_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Enterprise Type</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., LLC, Corporation" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-            {form.formState.errors.root && (
-              <div className="text-sm font-medium text-destructive">
-                {form.formState.errors.root.message}
-              </div>
-            )}
+                {/* Province / City / District */}
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="province"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Province</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Province" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input placeholder="City" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="district"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>District</FormLabel>
+                        <FormControl>
+                          <Input placeholder="District" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setOpen(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create Company"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+                {/* Register Address and Post Code */}
+                <FormField
+                  control={form.control}
+                  name="register_address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Register Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Registered company address" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="register_post_code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Register Post Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Postal code" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="company_size"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Size</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 100-500 employees" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Establishment Date */}
+                <FormField
+                  control={form.control}
+                  name="establishment_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Establishment Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormDescription>Format: yyyy-MM-dd (e.g., 1995-01-06)</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Information to Track */}
+              <div className="space-y-4">
+                <div>
+                  <FormLabel>Information to Track</FormLabel>
+                  <FormDescription>
+                    Select the types of information you want to track for this company.
+                  </FormDescription>
+                </div>
+                <div className="space-y-3">
+                  {TRACK_OPTIONS.map((option) => (
+                    <FormField
+                      key={option.id}
+                      control={form.control}
+                      name="trackInfo"
+                      render={({ field }) => {
+                        return (
+                          <FormItem
+                            key={option.id}
+                            className="flex flex-row items-start space-x-3 space-y-0"
+                          >
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(option.id as any)}
+                                onCheckedChange={(checked) => {
+                                  return checked
+                                    ? field.onChange([...(field.value || []), option.id])
+                                    : field.onChange(
+                                        field.value?.filter((value: string) => value !== option.id)
+                                      );
+                                }}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="font-normal">
+                                {option.label}
+                              </FormLabel>
+                              <FormDescription className="text-xs">
+                                {option.description}
+                              </FormDescription>
+                            </div>
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+                <FormMessage />
+              </div>
+
+              {form.formState.errors.root && (
+                <div className="text-sm font-medium text-destructive">
+                  {form.formState.errors.root.message}
+                </div>
+              )}
+            </form>
+          </Form>
+        </div>
+
+        {/* Fixed footer */}
+        <DialogFooter className="flex-shrink-0 pt-4 border-t border-border">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setOpen(false)}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={form.handleSubmit(onSubmit)}
+          >
+            {isSubmitting ? "Creating..." : "Create Company"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

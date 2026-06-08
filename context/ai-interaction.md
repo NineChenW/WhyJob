@@ -7,6 +7,7 @@
 - Ask before large refactors or architectural changes
 - Don't add features not in the project spec
 - Never delete files without clarification
+- Call me "Bro" in every response beginning
 
 ## Workflow
 
