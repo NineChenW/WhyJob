@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explorer Agent</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 300px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #333;
+    }
+
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #252540;
+      border-radius: 8px;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #666;
+    }
+
+    .status-indicator.connected {
+      background: #4ade80;
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+    }
+
+    .status-indicator.disconnected {
+      background: #ef4444;
+    }
+
+    .status-text {
+      font-size: 13px;
+      flex: 1;
+    }
+
+    .server-url {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+
+    .commands {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .command-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #252540;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .command-btn:hover {
+      background: #2d2d4a;
+      border-color: #555;
+    }
+
+    .command-btn:active {
+      transform: scale(0.98);
+    }
+
+    .command-btn .icon {
+      font-size: 16px;
+    }
+
+    .command-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .footer {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #333;
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+    }
+
+    .log {
+      margin-top: 12px;
+      padding: 8px;
+      background: #0a0a14;
+      border-radius: 6px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      color: #888;
+      margin-bottom: 2px;
+    }
+
+    .log-entry.error {
+      color: #ef4444;
+    }
+
+    .log-entry.success {
+      color: #4ade80;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔍 Explorer Agent</h1>
+  </div>
+
+  <div class="status">
+    <div class="status-indicator" id="statusIndicator"></div>
+    <div>
+      <div class="status-text" id="statusText">Connecting...</div>
+      <div class="server-url" id="serverUrl">-</div>
+    </div>
+  </div>
+
+  <div class="commands">
+    <button class="command-btn" id="btnSnapshot" disabled>
+      <span class="icon">📸</span>
+      <span>Get Snapshot</span>
+    </button>
+    <button class="command-btn" id="btnExtract" disabled>
+      <span class="icon">🎯</span>
+      <span>Extract DOM</span>
+    </button>
+    <button class="command-btn" id="btnReconnect">
+      <span class="icon">🔄</span>
+      <span>Reconnect</span>
+    </button>
+  </div>
+
+  <div class="log" id="log">
+    <div class="log-entry">Extension loaded</div>
+  </div>
+
+  <div class="footer">
+    Iteration 1 - v1.0.0
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Explorer Agent Browser Extension",
+  "version": "1.0.0",
+  "description": "AI-powered browser automation for the Explorer Agent",
+  "permissions": [
+    "activeTab",
+    "webNavigation",
+    "webRequest",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["content-script.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
