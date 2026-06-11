@@ -1,5 +1,6 @@
 // API route for extension to post command results
 // POST /api/agent/results
+// GET /api/agent/results?extensionId=xxx (for agent to poll)
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -58,6 +59,22 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+}
+
+// Agent polls for results
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const extensionId = searchParams.get('extensionId');
+
+  if (!extensionId) {
+    return NextResponse.json(
+      { error: 'extensionId required' },
+      { status: 400 }
+    );
+  }
+
+  const results = getResults(extensionId);
+  return NextResponse.json({ results });
 }
 
 export { resultStore };
