@@ -2,9 +2,9 @@
 
 ## Overview
 
-Chrome Extension serves as AI's "eyes and hands" in the browser. It receives commands from the Explorer Agent via WebSocket and executes browser actions, returning results for AI to analyze.
+Chrome Extension serves as AI's "eyes and hands" in the browser. It receives commands from the Explorer Agent via **HTTP polling** and executes browser actions, returning results for AI to analyze.
 
-**Iteration 1 Scope**: Basic 3 commands only - NAVIGATE, SNAPSHOT, EXTRACT_DOM
+**Iteration 1 Scope**: Basic 3 commands only - NAVIGATE, GET_SNAPSHOT, EXTRACT_DOM
 
 ## Requirements
 
@@ -12,7 +12,7 @@ Chrome Extension serves as AI's "eyes and hands" in the browser. It receives com
 
 - Manifest V3 Chrome Extension
 - Service Worker for message handling
-- WebSocket connection to server for real-time communication
+- **HTTP polling** for command fetch and result posting
 - No persistent background processes when idle
 
 ### Commands (Iteration 1)
@@ -57,24 +57,45 @@ Chrome Extension serves as AI's "eyes and hands" in the browser. It receives com
   }
   ```
 
-### WebSocket Protocol
+### HTTP Polling Protocol
 
 ```
-Server                          Extension
-  │                                │
-  │──── CONNECT (on load) ────────│
-  │◄──── EXTENSION_ID ─────────────│
-  │                                │
-  │──── COMMAND {                  │
-  │       type: 'NAVIGATE',       │
-  │       params: { url },        │
-  │       requestId                │
-  │     } ────────────────────────>│
-  │◄──── RESULT {                  │
-  │       requestId,               │
-  │       data,                    │
-  │       error?                   │
-  │     } ─────────────────────────│
+Extension                         Server
+  │                                  │
+  │──── GET /commands ──────────────▶│  (poll every 2s)
+  │◄─── { commands: [...] } ──────────│
+  │                                  │
+  │  (execute command in browser)     │
+  │                                  │
+  │──── POST /results ──────────────▶│
+  │       { results: [...] }        │
+  │◄─── { success: true } ───────────│
+```
+
+### API Endpoints
+
+#### GET /api/agent/commands
+Poll for pending commands.
+
+Query params: `?extensionId=xxx`
+
+Response:
+```typescript
+{
+  commands: Command[];
+  serverUrl?: string;  // if server URL changed
+}
+```
+
+#### POST /api/agent/results
+Post command execution results.
+
+Body:
+```typescript
+{
+  extensionId: string;
+  results: CommandResult[];
+}
 ```
 
 ### Error Handling
@@ -87,11 +108,10 @@ Server                          Extension
 
 - `@docs/ai-assist-fetch-info-plan.md` - Full system design
 - Chrome Extension Dev: https://developer.chrome.com/docs/extensions/
-- WebSocket client: Use standard WebSocket API
 
 ## Notes
 
 - Only 3 commands for Iteration 1 - keep it minimal
 - TEST_API and EXECUTE_SCRIPT come in Iteration 2+
-- Extension should handle multiple concurrent commands (queue them)
-- Need to handle WebSocket reconnection gracefully
+- Extension polls every 2 seconds by default
+- No extensionId required - uses shared bucket for testing
