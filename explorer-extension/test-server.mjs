@@ -29,6 +29,12 @@ function getResults(extensionId) {
   return results;
 }
 
+function addResult(extensionId, result) {
+  const existing = resultStore.get(extensionId) || [];
+  existing.push(result);
+  resultStore.set(extensionId, existing);
+}
+
 // Parse request body
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -100,6 +106,29 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Also accept /commands without prefix (for HttpExtension)
+  if (req.method === 'GET' && pathname === '/commands') {
+    const extensionId = url.searchParams.get('extensionId') || 'test';
+    let commands = getCommands(extensionId);
+    if (commands.length === 0) commands = getCommands('shared');
+
+    console.log(`[${new Date().toLocaleTimeString()}] POLL from ${extensionId} - ${commands.length} command(s)`);
+    json(res, 200, { commands, serverUrl: '' });
+    return;
+  }
+
+  // POST /commands (for HttpExtension)
+  if (req.method === 'POST' && pathname === '/commands') {
+    const body = await parseJsonBody(req);
+    const extensionId = body.extensionId || 'shared';
+    if (body.command) {
+      addCommand(extensionId, body.command);
+      console.log(`[${new Date().toLocaleTimeString()}] ADDED: ${body.command.type} (${body.command.requestId})`);
+    }
+    json(res, 200, { success: true });
+    return;
+  }
+
   // POST /api/agent/commands - Add commands (for testing)
   if (req.method === 'POST' && pathname === '/api/agent/commands') {
     const body = await parseJsonBody(req);
@@ -116,6 +145,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // POST /api/agent/results - Extension posts results
+  // Also store in 'shared' bucket for agent testing
   if (req.method === 'POST' && pathname === '/api/agent/results') {
     const body = await parseJsonBody(req);
     const { extensionId, results } = body;
@@ -124,19 +154,36 @@ const server = http.createServer(async (req, res) => {
       for (const result of results) {
         console.log(`[${new Date().toLocaleTimeString()}] RESULT: ${result.requestId} - ${result.success ? '✓' : '✗'}`);
         if (result.error) console.log(`  Error: ${result.error}`);
-        if (result.data) {
-          if (result.data.visibleText) {
-            console.log(`  Text preview: ${String(result.data.visibleText).slice(0, 80)}...`);
-          }
-          if (result.data.elements) {
-            const count = Object.values(result.data.elements).flat().length;
-            console.log(`  Elements: ${count}`);
-          }
-        }
+        // Store in extension's bucket AND in 'shared' for agent
+        addResult(extensionId, result);
+        addResult('shared', result);
       }
     }
 
     json(res, 200, { success: true });
+    return;
+  }
+
+  // POST /results - Also store in 'shared' for agent
+  if (req.method === 'POST' && pathname === '/results') {
+    const body = await parseJsonBody(req);
+    const { extensionId, results } = body;
+    console.log(`[${new Date().toLocaleTimeString()}] POSTED results from ${extensionId}: ${results?.length || 0} result(s)`);
+    if (results && Array.isArray(results)) {
+      for (const result of results) {
+        addResult('shared', result);
+      }
+    }
+    json(res, 200, { success: true });
+    return;
+  }
+
+  // GET /results - Agent polls for results (for HttpExtension)
+  if (req.method === 'GET' && pathname === '/results') {
+    const extensionId = url.searchParams.get('extensionId') || 'shared';
+    const results = getResults(extensionId);
+    console.log(`[${new Date().toLocaleTimeString()}] GET results for ${extensionId}: ${results.length} result(s)`);
+    json(res, 200, { results });
     return;
   }
 
