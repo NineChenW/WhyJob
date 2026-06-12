@@ -99,7 +99,7 @@ export interface PollingConfig {
 }
 
 export const DEFAULT_CONFIG: PollingConfig = {
-  serverUrl: 'http://127.0.0.1:3001/api/agent', // Standalone test server
+  serverUrl: 'http://localhost:3000/api/agent',
   pollIntervalMs: 2000,
   connectionTimeoutMs: 10000,
 };

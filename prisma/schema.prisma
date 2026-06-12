@@ -213,3 +213,69 @@ model Content {
 
   @@index([sourceType, sourceId])
 }
+
+// ============================================
+// Explorer Agent Models
+// ============================================
+
+// Task queue for company data fetching
+model FetchTask {
+  id           String   @id @default(cuid())
+  companyId    String
+  contentTypes String[] // ['company_culture', 'job_listing', 'company_wechat']
+  status       String   @default("pending")
+  // 'pending' | 'exploring' | 'complete' | 'failed'
+
+  // Exploration result
+  config   Json?
+  reason   String?
+  iterations Int      @default(0)
+
+  // AI confidence
+  confidence Float?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status])
+  @@index([companyId])
+}
+
+// Persistent URL configurations for content fetching
+model FetchConfig {
+  id          String  @id @default(cuid())
+  companyId   String
+  name        String  // Human-readable name
+  contentType String  // 'company_culture' | 'job_listing' | 'company_wechat'
+
+  // URL and method
+  url    String
+  method String @default("GET")
+
+  // Headers
+  headers Json   @default("{}")
+
+  // Query params (for pagination)
+  params Json @default("{}")
+
+  // Parse method
+  parseWith String @default("json") // 'json' | 'cheerio'
+  selectors Json? // For cheerio: { field: 'selector' }
+
+  // Pagination
+  pagination Json? // { type: 'page' | 'offset', paramName, maxPages }
+
+  // Auth
+  authRequired Boolean @default(false)
+  authNote     String?
+
+  // Metadata
+  isActive      Boolean @default(true)
+  intervalHours Int? // null = manual only
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, contentType])
+}

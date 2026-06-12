@@ -2,36 +2,10 @@
 // GET /api/agent/commands?extensionId=xxx
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCommands, addCommands } from '@/lib/http/relay';
+import { commandSchema } from '@/schemas/explorer';
 
-// In-memory command queue for testing
-// In production, this would be Redis or database
-const commandQueue = new Map<string, Command[]>();
-
-interface Command {
-  type: 'NAVIGATE' | 'GET_SNAPSHOT' | 'EXTRACT_DOM';
-  requestId: string;
-  params?: { url?: string; selectors?: Record<string, string> };
-}
-
-interface PollResponse {
-  commands: Command[];
-  serverUrl: string;
-}
-
-// Add a command to the queue for a specific extension
-export function addCommand(extensionId: string, command: Command): void {
-  const existing = commandQueue.get(extensionId) || [];
-  existing.push(command);
-  commandQueue.set(extensionId, existing);
-}
-
-// Get pending commands for an extension
-export function getCommands(extensionId: string): Command[] {
-  const commands = commandQueue.get(extensionId) || [];
-  commandQueue.delete(extensionId); // Clear after fetch
-  return commands;
-}
-
+// Get pending commands for an extension (consumes from queue)
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const extensionId = searchParams.get('extensionId');
@@ -45,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const commands = getCommands(extensionId);
 
-  const response: PollResponse = {
+  const response = {
     commands,
     serverUrl: '', // Keep same URL
   };
@@ -53,5 +27,46 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(response);
 }
 
-// Export commandQueue for use by test server / agent
-export { commandQueue };
+// DEBUG: Add commands to the queue (for manual testing)
+// POST /api/agent/debug/commands
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { extensionId, commands } = body;
+
+    if (!extensionId || !commands || !Array.isArray(commands)) {
+      return NextResponse.json(
+        { error: 'extensionId and commands array required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate each command
+    const validCommands = [];
+    for (const cmd of commands) {
+      const parsed = commandSchema.safeParse(cmd);
+      if (parsed.success) {
+        validCommands.push(parsed.data);
+      } else {
+        console.warn('[DEBUG] Invalid command:', parsed.error.issues);
+      }
+    }
+
+    if (validCommands.length > 0) {
+      addCommands(extensionId, validCommands);
+      console.log(`[DEBUG] Added ${validCommands.length} command(s) for ${extensionId}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      added: validCommands.length,
+      commands: validCommands,
+    });
+  } catch (error) {
+    console.error('[DEBUG] Failed to add commands:', error);
+    return NextResponse.json(
+      { error: 'Failed to add commands' },
+      { status: 500 }
+    );
+  }
+}
