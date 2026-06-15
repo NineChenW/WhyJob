@@ -372,3 +372,135 @@ export async function deleteFetchConfigsByCompanyId(
     where: { companyId },
   });
 }
+
+// ============================================
+// Agent State Operations
+// ============================================
+
+/**
+ * Discovery structure for agent memory
+ */
+export interface Discovery {
+  type: 'api_endpoint' | 'webpage' | 'requires_auth' | 'no_content';
+  url?: string;
+  data?: unknown;
+  selectors?: Record<string, string>;
+  requiresAuth?: boolean;
+  reason?: string;
+}
+
+/**
+ * Update agent state after action result
+ */
+export async function updateAgentState(
+  id: string,
+  data: {
+    pagesVisited?: string[];
+    discoveries?: Discovery[];
+    currentAction?: string | null;
+    currentTarget?: string | null;
+    iterations?: number;
+  }
+): Promise<FetchTask> {
+  return prisma.fetchTask.update({
+    where: { id },
+    data: {
+      ...(data.pagesVisited !== undefined && {
+        pagesVisited: data.pagesVisited,
+      }),
+      ...(data.discoveries !== undefined && {
+        discoveries: data.discoveries as unknown as Prisma.InputJsonValue,
+      }),
+      ...(data.currentAction !== undefined && {
+        currentAction: data.currentAction,
+      }),
+      ...(data.currentTarget !== undefined && {
+        currentTarget: data.currentTarget,
+      }),
+      ...(data.iterations !== undefined && {
+        iterations: data.iterations,
+      }),
+    },
+  });
+}
+
+/**
+ * Add a discovery to the task
+ */
+export async function addDiscovery(
+  id: string,
+  discovery: Discovery
+): Promise<FetchTask> {
+  const task = await prisma.fetchTask.findUnique({ where: { id } });
+  if (!task) throw new Error('Task not found');
+
+  const discoveries = (task.discoveries as unknown as Discovery[]) || [];
+  discoveries.push(discovery);
+
+  const pagesVisited = [...task.pagesVisited];
+  if (discovery.url && !pagesVisited.includes(discovery.url)) {
+    pagesVisited.push(discovery.url);
+  }
+
+  return prisma.fetchTask.update({
+    where: { id },
+    data: {
+      discoveries: discoveries as unknown as Prisma.InputJsonValue,
+      pagesVisited,
+    },
+  });
+}
+
+/**
+ * Set current action (for tracking what's being executed)
+ */
+export async function setCurrentAction(
+  id: string,
+  action: string,
+  target?: string
+): Promise<FetchTask> {
+  return prisma.fetchTask.update({
+    where: { id },
+    data: {
+      currentAction: action,
+      currentTarget: target ?? null,
+    },
+  });
+}
+
+/**
+ * Clear current action (after result is processed)
+ */
+export async function clearCurrentAction(
+  id: string
+): Promise<FetchTask> {
+  return prisma.fetchTask.update({
+    where: { id },
+    data: {
+      currentAction: null,
+      currentTarget: null,
+    },
+  });
+}
+
+/**
+ * Get task with company info for agent
+ */
+export async function getTaskWithCompany(
+  id: string
+): Promise<FetchTask & { company: { name: string; website: string | null; industry: string | null } | null }> {
+  const task = await prisma.fetchTask.findUnique({
+    where: { id },
+  });
+
+  if (!task) return null as unknown as FetchTask & { company: { name: string; website: string | null; industry: string | null } | null };
+
+  const company = await prisma.company.findUnique({
+    where: { id: task.companyId },
+  });
+
+  return {
+    ...task,
+    company,
+  };
+}

@@ -234,6 +234,12 @@ model FetchTask {
   // AI confidence
   confidence Float?
 
+  // Agent state - persisted for resumability
+  pagesVisited  String[] @default([]) // URLs visited
+  discoveries   Json     @default("[]") // Discovery[]
+  currentAction String?  // Current action being executed (NAVIGATE, EXTRACT_DOM, etc.)
+  currentTarget String?  // Target URL for current action
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?

@@ -8,10 +8,14 @@
 export interface PollResponse {
   commands: Command[];
   serverUrl: string; // Server can update the URL if needed
+  taskStatus?: 'exploring' | 'complete' | 'failed';
+  taskId?: string;
 }
 
 // Extension posts results to this endpoint
 export interface ResultPayload {
+  extensionId: string;
+  taskId?: string;
   results: CommandResult[];
 }
 

@@ -8,6 +8,7 @@
     "test:server": "node test-server.mjs"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.43",
     "esbuild": "^0.24.0"
   }
 }

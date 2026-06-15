@@ -168,6 +168,93 @@ export async function deleteTaskAction(
   }
 }
 
+/**
+ * Cancel a pending task (only pending tasks can be cancelled)
+ */
+export async function cancelTaskAction(
+  id: string
+): Promise<{ success: true; data: FetchTask } | { success: false; error: string }> {
+  try {
+    const existing = await getFetchTaskById(id);
+    if (!existing) {
+      return { success: false, error: 'Task not found' };
+    }
+    if (existing.status !== 'pending') {
+      return { success: false, error: 'Only pending tasks can be cancelled' };
+    }
+    const task = await deleteFetchTask(id);
+    revalidatePath('/admin/explorer');
+    return { success: true, data: task };
+  } catch (error) {
+    console.error('[Action] Failed to cancel task:', error);
+    return { success: false, error: 'Failed to cancel task' };
+  }
+}
+
+/**
+ * Retry a failed task (reset to pending)
+ */
+export async function retryTaskAction(
+  id: string
+): Promise<{ success: true; data: FetchTask } | { success: false; error: string }> {
+  try {
+    const task = await updateFetchTask(id, { status: 'pending' });
+    revalidatePath('/admin/explorer');
+    return { success: true, data: task };
+  } catch (error) {
+    console.error('[Action] Failed to retry task:', error);
+    return { success: false, error: 'Failed to retry task' };
+  }
+}
+
+/**
+ * Get pending + exploring tasks (for admin dashboard)
+ */
+export async function getActiveTasksAction(): Promise<
+  { success: true; data: FetchTask[] } | { success: false; error: string }
+> {
+  try {
+    const [pending, exploring] = await Promise.all([
+      getFetchTasksByStatus('pending'),
+      getFetchTasksByStatus('exploring'),
+    ]);
+    // Combine and sort by createdAt ascending (oldest first)
+    const combined = [...pending, ...exploring].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    );
+    return { success: true, data: combined };
+  } catch (error) {
+    console.error('[Action] Failed to get active tasks:', error);
+    return { success: false, error: 'Failed to get active tasks' };
+  }
+}
+
+/**
+ * Get completed + failed tasks (for admin history)
+ */
+export async function getTaskHistoryAction(): Promise<
+  { success: true; data: FetchTask[] } | { success: false; error: string }
+> {
+  try {
+    const [completed, failed] = await Promise.all([
+      getFetchTasksByStatus('complete'),
+      getFetchTasksByStatus('failed'),
+    ]);
+    // Combine and sort by completedAt descending (most recent first)
+    const combined = [...completed, ...failed].sort(
+      (a, b) => {
+        const aTime = a.completedAt?.getTime() ?? 0;
+        const bTime = b.completedAt?.getTime() ?? 0;
+        return bTime - aTime;
+      }
+    );
+    return { success: true, data: combined };
+  } catch (error) {
+    console.error('[Action] Failed to get task history:', error);
+    return { success: false, error: 'Failed to get task history' };
+  }
+}
+
 // ============================================
 // Config Actions
 // ============================================

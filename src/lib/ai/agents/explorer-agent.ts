@@ -8,12 +8,53 @@
  */
 
 // ============================================
+// Logging
+// ============================================
+
+type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+
+interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  phase: string;
+  message: string;
+  data?: unknown;
+}
+
+function formatLog(level: LogLevel, phase: string, message: string, data?: unknown): string {
+  const timestamp = new Date().toISOString();
+  const base = `[${timestamp}] [${level}] [${phase}] ${message}`;
+  if (data !== undefined) {
+    return `${base}\n  Data: ${JSON.stringify(data, null, 2)}`;
+  }
+  return base;
+}
+
+function log(phase: string, level: LogLevel, message: string, data?: unknown): void {
+  const formatted = formatLog(level, phase, message, data);
+  if (level === 'ERROR') {
+    console.error(formatted);
+  } else if (level === 'WARN') {
+    console.warn(formatted);
+  } else {
+    console.log(formatted);
+  }
+}
+
+// Convenience log helpers
+const logInfo = (phase: string, message: string, data?: unknown) => log(phase, 'INFO', message, data);
+const logWarn = (phase: string, message: string, data?: unknown) => log(phase, 'WARN', message, data);
+const logError = (phase: string, message: string, data?: unknown) => log(phase, 'ERROR', message, data);
+const logDebug = (phase: string, message: string, data?: unknown) => log(phase, 'DEBUG', message, data);
+
+// ============================================
 // Constants
 // ============================================
 
 const MAX_ITERATIONS = 5;
 const QUALITY_THRESHOLD = 70;
-const NETWORK_TIMEOUT = 10000;
+const NETWORK_TIMEOUT = 60000; // 60 seconds total timeout
+const COMMAND_LATENCY_DELAY = 2000; // 2 seconds to wait for extension to poll and execute
 
 // ============================================
 // Types
@@ -112,6 +153,7 @@ export interface PageSnapshot {
 // ============================================
 
 function initializeMemory(task: ExplorationTask): ExplorationMemory {
+  logInfo('MEMORY', 'Initializing exploration memory', { companyId: task.companyId, company: task.company, contentTypes: task.contentTypes });
   return {
     task,
     pagesVisited: [],
@@ -154,6 +196,8 @@ async function executeAction(
   decision: Decision,
   extension: ExtensionInterface
 ): Promise<ExtensionResult> {
+  logInfo('ACT', `Executing action: ${decision.action}`, { targetUrl: decision.targetUrl, selectors: decision.selectors, reason: decision.reason });
+
   switch (decision.action) {
     case 'NAVIGATE':
       if (!decision.targetUrl) {
@@ -216,12 +260,15 @@ async function decideNextAction(
 ): Promise<Decision> {
   const { task, iteration, pagesVisited, discoveries } = state;
 
+  logDebug('THINK', `Deciding next action for iteration ${iteration}`, { pagesVisited, discoveriesCount: discoveries.length });
+
   // Rule 1: First iteration - navigate to company website
   if (iteration === 0 && pagesVisited.length === 0) {
     const startUrl = task.company.website
       ? cleanUrl(task.company.website)
       : `https://www.google.com/search?q=${encodeURIComponent(task.company.name + ' careers')}`;
 
+    logInfo('THINK', `→ NAVIGATE to ${startUrl}`, { reason: 'First iteration - navigate to company website' });
     return {
       action: 'NAVIGATE',
       targetUrl: startUrl,
@@ -232,6 +279,7 @@ async function decideNextAction(
   // Rule 2: Check for API endpoints discovered
   const apiDiscovery = discoveries.find((d) => d.type === 'api_endpoint');
   if (apiDiscovery?.url) {
+    logInfo('THINK', `→ TEST_API at ${apiDiscovery.url}`, { reason: 'Found API endpoint - testing it' });
     return {
       action: 'TEST_API',
       targetUrl: apiDiscovery.url,
@@ -241,6 +289,7 @@ async function decideNextAction(
 
   // Rule 3: No content after 2 iterations - fail
   if (discoveries.length === 0 && iteration >= 2) {
+    logWarn('THINK', '→ FAIL', { reason: 'No accessible content found after 2 iterations' });
     return {
       action: 'FAIL',
       reason: 'No accessible content found after 2 iterations',
@@ -251,6 +300,7 @@ async function decideNextAction(
   if (discoveries.length > 0) {
     const heuristicDecision = decideWithHeuristic(state);
     if (heuristicDecision) {
+      logInfo('THINK', `→ ${heuristicDecision.action}`, { targetUrl: heuristicDecision.targetUrl, reason: heuristicDecision.reason });
       return heuristicDecision;
     }
   }
@@ -259,6 +309,7 @@ async function decideNextAction(
   if (task.company.website && iteration < MAX_ITERATIONS - 1) {
     const careersUrl = suggestCareersUrl(task.company.website);
     if (!pagesVisited.includes(careersUrl)) {
+      logInfo('THINK', `→ NAVIGATE to ${careersUrl}`, { reason: 'Trying careers page' });
       return {
         action: 'NAVIGATE',
         targetUrl: careersUrl,
@@ -268,6 +319,7 @@ async function decideNextAction(
   }
 
   // Default: Generate config with what we have
+  logInfo('THINK', '→ GENERATE_CONFIG', { reason: 'Max iterations or no more pages to try' });
   return {
     action: 'GENERATE_CONFIG',
     reason: 'Max iterations or no more pages to try',
@@ -348,8 +400,11 @@ function decideWithHeuristic(
  * Analyze result from extension command and extract discoveries
  */
 function analyzeResult(result: ExtensionResult, decision: Decision): Discovery | null {
+  logInfo('OBSERVE', `Analyzing result for action: ${decision.action}`, { requestId: result.requestId, error: result.error });
+
   // Handle errors
   if (result.error) {
+    logWarn('OBSERVE', 'Action returned error', { error: result.error, action: decision.action });
     return {
       type: 'no_content',
       reason: result.error,
@@ -362,6 +417,7 @@ function analyzeResult(result: ExtensionResult, decision: Decision): Discovery |
     case 'NAVIGATE': {
       const navData = data as { success: boolean; url?: string; title?: string } | undefined;
       if (!navData?.success) {
+        logWarn('OBSERVE', 'Navigation failed', { url: decision.targetUrl, navData });
         return {
           type: 'no_content',
           url: decision.targetUrl,
@@ -370,6 +426,7 @@ function analyzeResult(result: ExtensionResult, decision: Decision): Discovery |
       }
 
       // Navigation succeeded - need to get snapshot to analyze
+      logInfo('OBSERVE', 'Navigation succeeded, discovered webpage', { url: navData.url || decision.targetUrl, title: navData.title });
       return {
         type: 'webpage',
         url: navData.url || decision.targetUrl,
@@ -380,6 +437,7 @@ function analyzeResult(result: ExtensionResult, decision: Decision): Discovery |
     case 'EXTRACT_DOM': {
       const elements = data as Record<string, unknown> | undefined;
       if (!elements || Object.keys(elements).length === 0) {
+        logWarn('OBSERVE', 'No content extracted with selectors', { url: decision.targetUrl, selectors: decision.selectors });
         return {
           type: 'no_content',
           url: decision.targetUrl,
@@ -387,6 +445,7 @@ function analyzeResult(result: ExtensionResult, decision: Decision): Discovery |
         };
       }
 
+      logInfo('OBSERVE', 'DOM extraction successful', { url: decision.targetUrl, elementCount: Object.keys(elements).length, selectors: decision.selectors });
       return {
         type: 'webpage',
         url: decision.targetUrl,
@@ -410,7 +469,10 @@ function analyzeResult(result: ExtensionResult, decision: Decision): Discovery |
 function generateFinalConfig(memory: ExplorationMemory): ExplorationResult {
   const { task, discoveries } = memory;
 
+  logInfo('CONFIG', 'Generating final FetchConfig', { companyId: task.companyId, discoveryCount: discoveries.length });
+
   if (discoveries.length === 0) {
+    logError('CONFIG', 'Failed: No discoveries');
     return {
       success: false,
       reason: 'No discoveries to generate config from',
@@ -419,17 +481,28 @@ function generateFinalConfig(memory: ExplorationMemory): ExplorationResult {
 
   const url = pickBestUrl(discoveries);
   if (!url) {
+    logError('CONFIG', 'Failed: No valid URL in discoveries');
     return {
       success: false,
       reason: 'No valid URL found in discoveries',
     };
   }
 
+  logInfo('CONFIG', `Selected URL: ${url}`);
+
   const parseWith = inferParseMethod(discoveries);
   const selectors = buildSelectors(discoveries, task.contentTypes[0]);
   const pagination = inferPagination(discoveries);
   const authRequired = discoveries.some((d) => d.requiresAuth);
   const confidence = calculateConfidence(discoveries);
+
+  logInfo('CONFIG', 'FetchConfig generated successfully', {
+    contentType: task.contentTypes[0],
+    parseWith,
+    authRequired,
+    confidence,
+    pagination,
+  });
 
   return {
     success: true,
@@ -609,6 +682,8 @@ export async function explore(
   task: ExplorationTask,
   extension: ExtensionInterface
 ): Promise<ExplorationResult> {
+  logInfo('EXPLORE', 'Starting exploration', { companyId: task.companyId, company: task.company.name, contentTypes: task.contentTypes });
+
   // 1. Initialize working memory
   const memory = initializeMemory(task);
 
@@ -618,6 +693,7 @@ export async function explore(
   // 3. ACT Loop (max 5 iterations)
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     memory.iteration = i;
+    logInfo('LOOP', `=== Iteration ${i + 1}/${MAX_ITERATIONS} ===`, { pagesVisited: memory.pagesVisited, discoveriesCount: memory.discoveries.length });
 
     // THINK: Decide next action
     const decision = await decideNextAction({
@@ -629,15 +705,20 @@ export async function explore(
     });
 
     // ACT: Execute via extension
+    logInfo('ACT', 'Executing action via extension', { action: decision.action });
     const result = await executeAction(decision, extension);
 
     // OBSERVE: Analyze result
     const discovery = analyzeResult(result, decision);
     if (discovery) {
       memory.discoveries.push(discovery);
+      logInfo('MEMORY', 'Discovery added', { type: discovery.type, url: discovery.url, reason: discovery.reason });
       if (decision.targetUrl && !memory.pagesVisited.includes(decision.targetUrl)) {
         memory.pagesVisited.push(decision.targetUrl);
+        logInfo('MEMORY', 'Page added to visited', { url: decision.targetUrl });
       }
+    } else {
+      logInfo('OBSERVE', 'No discovery extracted from result');
     }
 
     // Learn: Store in memory (Iteration 3)
@@ -645,14 +726,17 @@ export async function explore(
 
     // Check stopping conditions
     if (decision.action === 'GENERATE_CONFIG') {
+      logInfo('LOOP', 'Stopping condition: GENERATE_CONFIG', { totalIterations: i + 1, totalDiscoveries: memory.discoveries.length });
       return generateFinalConfig(memory);
     }
     if (decision.action === 'FAIL') {
+      logWarn('LOOP', 'Stopping condition: FAIL', { reason: decision.reason, totalIterations: i + 1 });
       return { success: false, reason: decision.reason };
     }
   }
 
   // Max iterations reached - try to generate config with what we have
+  logWarn('LOOP', 'Max iterations reached', { totalDiscoveries: memory.discoveries.length });
   return generateFinalConfig(memory);
 }
 
@@ -687,17 +771,21 @@ export class HttpExtension implements ExtensionInterface {
 
   async connect(): Promise<void> {
     // HTTP doesn't require connection - just verify server is reachable
+    logInfo('HTTP_EXT', `Connecting to ${this.serverUrl}`);
     try {
       const response = await fetch(`${this.serverUrl}/commands?extensionId=${AGENT_EXTENSION_ID}`);
       if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
       }
+      logInfo('HTTP_EXT', 'Connected successfully');
     } catch (error) {
+      logError('HTTP_EXT', `Connection failed: ${error}`);
       throw new Error(`Failed to connect to ${this.serverUrl}: ${error}`);
     }
   }
 
   disconnect(): void {
+    logInfo('HTTP_EXT', 'Disconnecting');
     // Clean up pending requests
     this.pendingRequests.forEach((pending) => {
       clearTimeout(pending.timeout);
@@ -707,6 +795,7 @@ export class HttpExtension implements ExtensionInterface {
   }
 
   async sendCommand(command: ExtensionCommand): Promise<ExtensionResult> {
+    logInfo('HTTP_EXT', `Sending command: ${command.type}`, { requestId: command.requestId });
     // Send command via POST
     const response = await fetch(`${this.serverUrl}/commands`, {
       method: 'POST',
@@ -718,9 +807,11 @@ export class HttpExtension implements ExtensionInterface {
     });
 
     if (!response.ok) {
+      logWarn('HTTP_EXT', `POST failed: ${response.status}`);
       return { requestId: command.requestId, error: `POST failed: ${response.status}` };
     }
 
+    logInfo('HTTP_EXT', `Waiting for result: ${command.requestId}`);
     // Wait for result via polling
     return this.waitForResult(command.requestId);
   }
@@ -731,13 +822,17 @@ export class HttpExtension implements ExtensionInterface {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
+        logError('HTTP_EXT', `Request timeout: ${requestId}`);
         reject(new Error('Request timeout'));
       }, NETWORK_TIMEOUT);
 
       this.pendingRequests.set(requestId, { resolve, reject, timeout });
 
-      // Start polling
-      this.pollForResult(requestId, startTime);
+      // Wait for command to be consumed and executed before polling for results
+      // This accounts for the extension poll interval (typically 1-2 seconds)
+      setTimeout(() => {
+        this.pollForResult(requestId, startTime);
+      }, COMMAND_LATENCY_DELAY);
     });
   }
 
@@ -763,12 +858,12 @@ export class HttpExtension implements ExtensionInterface {
         if (response.ok) {
           const data = await response.json();
           const result = data.results?.find((r: ExtensionResult) => r.requestId === requestId);
-
           if (result) {
             const pending = this.pendingRequests.get(requestId);
             if (pending) {
               clearTimeout(pending.timeout);
               this.pendingRequests.delete(requestId);
+              logInfo('HTTP_EXT', `Result received: ${requestId}`, { hasError: !!result.error });
               pending.resolve(result);
               return;
             }

@@ -1,96 +1,213 @@
+# Update Rules Of Current Feature (!!!Do not edit this section!!!)
+
+!!! Read this before update. !!!
+Do not violate any following rules:
+
+1. Please keep all the comments stay the same.
+2. Do not delete the existing history records.
+3. Only add a new history record at the end of this file after a feature is stetted completed.
+4. Fill the current feature area with the current active feature title.
+5. Update status to "In Progress" when starting a new feature.
+6. Update status to "Completed" when finishing a feature.
+7. Update goals section with current feature requirements.
+8. Update notes section with current feature references.
+
 # Current Feature
 
 ## Status
-Complete
+
+In Progress
 
 ## Goals
-- [x] Add FetchTask and FetchConfig models to Prisma schema
-- [x] Create Prisma migration for new models
-- [x] Implement HTTP polling relay in `src/lib/http/relay.ts`
-- [x] Create API routes: `/api/agent/commands`, `/api/agent/results`, `/api/explorer/tasks`
-- [x] Implement explorer server actions in `src/actions/explorer.ts`
-- [x] Create DB helper functions in `src/lib/db/explorer.ts`
-- [x] Add Zod schemas in `src/schemas/explorer.ts`
-- [x] Verify build passes
+
+- [x] Create admin page at `/admin/explorer`
+- [x] Submit New Task form with company dropdown + content type checkboxes
+- [x] Pending Tasks list showing waiting/exploring status
+- [x] Exploration Results section with config preview and Approve/Retry actions
+- [x] Server actions: submitExplorationTask, getExplorationTask, cancelExplorationTask, getPendingExplorationTasks, getExplorationHistory, approveExplorationConfig, retryExplorationTask
+- [x] Components: CompanySelect, ContentTypeCheckbox, ExplorationStatusBadge, ConfigPreview, ConfidenceBadge
 
 ## Notes
-- HTTP polling is serverless-friendly (unlike WebSocket)
-- Extension polls every 2 seconds
-- Commands stored in shared bucket for testing
-- Results posted to shared bucket so agent can poll them
-- Task assignment is fire-and-forget for Iteration 1
-- `intervalHours: null` = manual only (not automatic polling)
-- Added debug endpoint `POST /api/agent/commands` for manual testing
-- Fixed extension default port from 3001 to 3000
 
-### Task States
+**Implementation Complete** - Build passes, implementation matches spec.
+
+### UI Layout (3 Sections)
+
+**Section 1: Submit New Task**
 ```
-pending → exploring → complete
-                    ↘ failed
-```
-- `pending`: Task created, waiting for extension online
-- `exploring`: Extension connected, AI actively exploring
-- `complete`: Config generated successfully
-- `failed`: Max iterations or unrecoverable error
-
-### Content Types
-- `company_culture`
-- `job_listing`
-- `company_wechat`
-
-### Parse Methods
-- `json` - Parse as JSON
-- `cheerio` - CSS selector extraction
-
-### Pagination Types
-- `page` - Page number parameter
-- `offset` - Offset parameter
-- `cursor` - Cursor-based pagination
-
-### HTTP Polling Flow
-```
-Extension ──GET /commands──▶ Server
-         ◀──{ commands }───
-
-Extension ──POST /results──▶ Server
-         ◀──{ success }────
-
-                    Server ──GET /results──▶ Explorer Agent
-                    Server ◀──{ results }───
-
-                    Server ◀──POST /commands─ Explorer Agent
-                    Server ──{ success }───▶ Explorer Agent
+┌─────────────────────────────────────────────────────────────┐
+│                    Explore Company Data                      │
+├─────────────────────────────────────────────────────────────┤
+│  Company:    [Dropdown - select from existing companies]    │
+│                                                              │
+│  Content Types (select one or more):                         │
+│  ☐ Job Listings (careers page, job board)                   │
+│  ☐ Company Culture (about page, values)                     │
+│  ☐ WeChat (wechat official account info)                    │
+│                                                              │
+│                            [Start Exploration]              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Command Interface
+**Section 2: Pending Tasks**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Pending Explorations                      │
+├─────────────────────────────────────────────────────────────┤
+│  Company          │ Content Types      │ Status  │ Action   │
+│  ─────────────────────────────────────────────────────────  │
+│  Tesla            │ Job Listings       │ waiting │ Cancel   │
+│  Stripe           │ Company Culture    │ waiting │ Cancel   │
+└─────────────────────────────────────────────────────────────┘
+Status: waiting = extension not online yet, exploring = in progress
+```
+
+**Section 3: Exploration Results**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Exploration Results                       │
+├─────────────────────────────────────────────────────────────┤
+│  Tesla - Job Listings                                       │
+│  Status: ✅ Complete | Confidence: 85% | Iterations: 3     │
+│                                                              │
+│  Discovered:                                                 │
+│  ✓ Found careers.tesla.com API                              │
+│  ✓ Returns structured JSON                                  │
+│  ✓ 50 jobs per page, pagination works                      │
+│                                                              │
+│  Generated Config Preview:                                  │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │ url: https://careers.tesla.com/api/jobs               │  │
+│  │ method: GET                                          │  │
+│  │ parseWith: json                                      │  │
+│  │ pagination: { type: page, maxPages: 10 }            │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                              │
+│  [Approve & Save]  [Retry]  [View Test Data]               │
+├─────────────────────────────────────────────────────────────┤
+│  Stripe - Job Listings                                       │
+│  Status: ❌ Failed | Reason: No accessible API found       │
+│                                                              │
+│  Attempted:                                                  │
+│  ✗ careers.stripe.com - redirected to Lever                │
+│  ✗ api.stripe.com/v1/jobs - 401 Unauthorized               │
+│                                                              │
+│  [Try Again with Different URL]  [Mark as Manual]          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Models
+
+**FetchTask** (from `explorer-agent-03-server-integration-spec.md`):
 ```typescript
-interface Command {
-  type: 'NAVIGATE' | 'GET_SNAPSHOT' | 'EXTRACT_DOM';
-  requestId: string;
-  params?: { url?: string; selectors?: Record<string, string> };
-}
-
-interface CommandResult {
-  requestId: string;
-  success: boolean;
-  data?: unknown;
-  error?: string;
+{
+  id: string;
+  companyId: string;
+  contentTypes: string[];  // ['company_culture', 'job_listing', 'company_wechat']
+  status: 'pending' | 'exploring' | 'complete' | 'failed';
+  config: Json?;           // FetchConfig if successful
+  reason: string?;         // Failure reason if failed
+  iterations: number;
+  confidence: number?;
+  createdAt: Date;
+  completedAt: Date?;
 }
 ```
 
-### API Endpoints
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/agent/commands?extensionId=xxx` | Extension polls for pending commands |
-| POST | `/api/agent/commands` | Debug: add commands to queue |
-| POST | `/api/agent/results` | Extension posts command execution results |
-| GET | `/api/agent/results?extensionId=xxx` | Agent polls for command results |
-| POST | `/api/explorer/tasks` | Create new exploration task |
-| GET | `/api/explorer/tasks/:id` | Get task status and result |
+**FetchConfig**:
+```typescript
+{
+  id: string;
+  companyId: string;
+  name: string;
+  contentType: 'company_culture' | 'job_listing' | 'company_wechat';
+  url: string;
+  method: 'GET' | 'POST';
+  headers: Json;
+  params: Json;
+  parseWith: 'json' | 'cheerio';
+  selectors: Json?;
+  pagination: Json?;
+  authRequired: boolean;
+  authNote: string?;
+  isActive: boolean;
+  intervalHours: number?;
+}
+```
 
-### Reference
-- `@context/features/explorer-agent-03-server-integration-spec.md` - Full spec with exact schemas
-- `@docs/ai-assist-fetch-info-plan.md` - Full system design
+### Content Types (enum)
+- `job_listing` - Careers page, job board
+- `company_culture` - About page, values
+- `company_wechat` - WeChat official account info
+
+### Server Actions
+
+```typescript
+// Create exploration task
+submitExplorationTask(input: {
+  companyId: string;
+  contentTypes: string[];
+}): Promise<{ taskId: string; status: string }>;
+
+// Get task status
+getExplorationTask(taskId: string): Promise<ExplorationTask>;
+
+// Cancel task (only if pending)
+cancelExplorationTask(taskId: string): Promise<void>;
+
+// Get all pending/exploring tasks
+getPendingExplorationTasks(): Promise<ExplorationTask[]>;
+
+// Get completed/failed tasks
+getExplorationHistory(): Promise<ExplorationTask[]>;
+
+// Approve and save config to FetchConfig
+approveExplorationConfig(taskId: string): Promise<void>;
+
+// Retry failed task (reset status to pending)
+retryExplorationTask(taskId: string): Promise<void>;
+```
+
+### File Structure
+```
+src/
+├── actions/
+│   └── explorer.ts           # All server actions above
+├── components/
+│   └── admin/
+│       └── explorer/
+│           ├── explorer-page.tsx       # Main admin page (server component)
+│           ├── task-form.tsx           # Section 1: Submit form
+│           ├── task-list.tsx           # Section 2: Pending tasks
+│           ├── exploration-results.tsx # Section 3: Results
+│           ├── config-preview.tsx      # JSON preview of FetchConfig
+│           └── status-badge.tsx       # ExplorationStatusBadge + ConfidenceBadge
+├── app/
+│   └── admin/
+│       └── explorer/
+│           └── page.tsx    # Route page (client wrapper if needed)
+└── lib/
+    └── db/
+        └── explorer.ts    # DB helpers (may already exist from server integration)
+```
+
+### Key Implementation Notes
+
+- Use existing shadcn/ui components (Card, Button, Checkbox, Select, Badge, Textarea, Table)
+- Company dropdown: fetch companies via `getCompanies()` action (exists)
+- Content types checkbox: multi-select with enum values from schema
+- Task list: auto-refresh every 5 seconds OR use optimistic updates
+- Config preview: render as formatted JSON in `<pre>` with syntax highlighting
+- Toast notifications on: task created, task completed, config approved, task failed
+- Status badges: `waiting` (gray), `exploring` (blue/animated), `complete` (green), `failed` (red)
+- Confidence colors: green >80%, yellow 60-80%, red <60%
+
+### References
+
+- [docs/ai-assist-fetch-info-plan.md](docs/ai-assist-fetch-info-plan.md)
+- [explorer-agent-03-server-integration-spec.md](context/features/explorer-agent-03-server-integration-spec.md)
+- UI: Use existing shadcn components, keep simple for Iteration 1
+- Toast notifications on status changes
 
 ## History
 
