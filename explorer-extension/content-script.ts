@@ -8,6 +8,8 @@ import type {
   SnapshotResult,
   NetworkCall,
   BoundingRect,
+  ExecuteJsParams,
+  ExecuteJsResult,
 } from './types';
 
 import {

@@ -7,8 +7,19 @@ const logEl = document.getElementById('log');
 const btnSnapshot = document.getElementById('btnSnapshot');
 const btnExtract = document.getElementById('btnExtract');
 const btnReconnect = document.getElementById('btnReconnect');
+const btnExecuteJs = document.getElementById('btnExecuteJs');
+const btnStartMonitor = document.getElementById('btnStartMonitor');
+const btnGetLog = document.getElementById('btnGetLog');
+const btnStopMonitor = document.getElementById('btnStopMonitor');
 
 let isConnected = false;
+let monitoringId: string | null = null;
+let monitoringActive = false;
+
+// Initialize button states
+btnExecuteJs.disabled = true;
+btnGetLog.disabled = true;
+btnStopMonitor.disabled = true;
 
 // ============================================
 // Logging
@@ -39,6 +50,7 @@ function updateStatus(connected, serverUrl) {
     statusText.textContent = 'Connected';
     btnSnapshot.disabled = false;
     btnExtract.disabled = false;
+    btnExecuteJs.disabled = false; // Enable EXECUTE_JS when connected
   } else {
     statusIndicator.className = 'status-indicator disconnected';
     statusText.textContent = 'Disconnected';
@@ -109,6 +121,103 @@ btnReconnect.addEventListener('click', () => {
     if (response?.success) {
       addLog('Reconnection triggered', 'success');
     }
+  });
+});
+
+// ============================================
+// Iteration 2: Debug Commands
+// ============================================
+
+btnExecuteJs.addEventListener('click', async () => {
+  addLog('EXECUTE_JS: Showing alert...');
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      addLog('No active tab', 'error');
+      return;
+    }
+
+    // Send to service worker, which will execute via chrome.scripting.executeScript
+    chrome.runtime.sendMessage({
+      type: 'DEBUG_EXECUTE_JS',
+      script: "alert('Explorer Agent says hello!'); document.body.style.backgroundColor = '#ff6b6b';",
+      args: {},
+    }, (response) => {
+      if (response?.success) {
+        addLog(`JS executed: ${response.output || 'ok'}`, 'success');
+      } else {
+        addLog(`JS failed: ${response?.error || 'unknown'}`, 'error');
+      }
+    });
+  } catch (error) {
+    addLog(`EXECUTE_JS failed: ${error.message}`, 'error');
+  }
+});
+
+btnStartMonitor.addEventListener('click', () => {
+  addLog('START_NETWORK_MONITORING...');
+  chrome.runtime.sendMessage({ type: 'DEBUG_START_MONITOR' }, (response) => {
+    if (response?.success) {
+      monitoringId = response.monitoringId;
+      monitoringActive = true;
+      btnGetLog.disabled = false;
+      btnStopMonitor.disabled = false;
+      btnStartMonitor.disabled = true;
+      addLog(`Monitor started: ${monitoringId}`, 'success');
+    } else {
+      addLog(`Start monitor failed: ${response?.error || 'already active'}`, 'error');
+    }
+  });
+});
+
+btnGetLog.addEventListener('click', () => {
+  if (!monitoringId) {
+    addLog('No active monitoring session', 'error');
+    return;
+  }
+  addLog('GET_NETWORK_LOG...');
+  chrome.runtime.sendMessage({
+    type: 'DEBUG_GET_NETWORK_LOG',
+    monitoringId,
+  }, (response) => {
+    if (response?.success) {
+      const count = response.calls?.length || 0;
+      addLog(`Network calls: ${count}`, 'success');
+      if (count > 0) {
+        // Log first few calls
+        response.calls.slice(0, 3).forEach((call: any) => {
+          addLog(`  ${call.method} ${call.url.slice(0, 50)}... ${call.status}`);
+        });
+        if (count > 3) {
+          addLog(`  ... and ${count - 3} more`);
+        }
+      }
+    } else {
+      addLog(`Get log failed: ${response?.error || 'unknown'}`, 'error');
+    }
+  });
+});
+
+btnStopMonitor.addEventListener('click', () => {
+  if (!monitoringId) {
+    addLog('No active monitoring session', 'error');
+    return;
+  }
+  addLog('STOP_NETWORK_MONITORING...');
+  chrome.runtime.sendMessage({
+    type: 'DEBUG_STOP_MONITOR',
+    monitoringId,
+  }, (response) => {
+    if (response?.success) {
+      addLog(`Monitor stopped. Calls: ${response.totalCallsCaptured}, Duration: ${response.duration}ms`, 'success');
+    } else {
+      addLog(`Stop monitor failed: ${response?.error || 'invalid id'}`, 'error');
+    }
+    monitoringId = null;
+    monitoringActive = false;
+    btnGetLog.disabled = true;
+    btnStopMonitor.disabled = true;
+    btnStartMonitor.disabled = false;
   });
 });
 

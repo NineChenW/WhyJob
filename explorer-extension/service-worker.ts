@@ -13,11 +13,22 @@ import type {
   NavigateResult,
   SnapshotResult,
   ExtractDomResult,
+  ExecuteJsParams,
+  ExecuteJsResult,
+  StartNetworkMonitoringResult,
+  GetNetworkLogParams,
+  GetNetworkLogResult,
+  StopNetworkMonitoringParams,
+  StopNetworkMonitoringResult,
+  CapturedNetworkCall,
+  NetworkCallStore,
 } from './types';
 
 import {
   DEFAULT_CONFIG,
   NAVIGATION_TIMEOUT_MS,
+  JS_EXECUTION_TIMEOUT_MS,
+  MAX_NETWORK_CALLS_STORED,
 } from './types';
 
 // ============================================
@@ -32,6 +43,13 @@ let currentTaskId: string | null = null;
 let currentTaskWindowId: number | null = null; // Window dedicated to current task
 let pendingCommandId: string | null = null; // Track if we're waiting for command to execute
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+// Network monitoring state
+let networkMonitorStore: NetworkCallStore = {};
+let activeMonitoringId: string | null = null;
+let capturedCalls: CapturedNetworkCall[] = [];
+let lastGetNetworkLogTime = 0;
+let webRequestListenerActive = false;
 
 // ============================================
 // HTTP API Functions
@@ -333,6 +351,22 @@ async function executeCommands(commands: Command[]): Promise<CommandResult[]> {
           result = await executeExtractDom(command.params as ExtractDomParams, command.requestId);
           break;
 
+        case 'EXECUTE_JS':
+          result = await executeJs(command.params as ExecuteJsParams, command.requestId);
+          break;
+
+        case 'START_NETWORK_MONITORING':
+          result = await executeStartNetworkMonitoring(command.requestId);
+          break;
+
+        case 'GET_NETWORK_LOG':
+          result = await executeGetNetworkLog(command.params as GetNetworkLogParams | undefined, command.requestId);
+          break;
+
+        case 'STOP_NETWORK_MONITORING':
+          result = await executeStopNetworkMonitoring(command.params as StopNetworkMonitoringParams, command.requestId);
+          break;
+
         default:
           result = {
             requestId: command.requestId,
@@ -495,6 +529,8 @@ async function executeNavigate(params: NavigateParams, requestId: string): Promi
       }
 
       // Navigate to target URL
+      // Clear network calls on new navigation
+      capturedCalls = [];
       chrome.tabs.update(tab.id, { url: targetUrl });
     });
   });
@@ -592,6 +628,306 @@ async function executeExtractDom(params: ExtractDomParams, requestId: string): P
 }
 
 // ============================================
+// Network Monitoring Functions
+// ============================================
+
+/**
+ * Generate unique ID for network calls
+ */
+function generateNetworkCallId(): string {
+  return 'nc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+/**
+ * Handle completed network request - captures response data
+ */
+function handleNetworkCompleted(details: chrome.webRequest.WebRequestDetails) {
+  if (!activeMonitoringId) return;
+
+  // Only capture XHR and fetch requests
+  if (details.type !== 'xmlhttprequest' && details.type !== 'fetch') return;
+
+  // Build captured network call object
+  const call: CapturedNetworkCall = {
+    id: generateNetworkCallId(),
+    url: details.url,
+    method: details.method,
+    status: details.statusCode || 0,
+    responseType: details.type === 'xmlhttprequest' ? 'xhr' : 'fetch',
+    timing: 0, // Timing not available from onCompleted
+    requestHeaders: {}, // Headers not available from onCompleted in MV3
+    responseHeaders: {}, // Would need onHeadersReceived for this
+    timestamp: new Date(),
+  };
+
+  // Store in the active monitoring session
+  if (networkMonitorStore[activeMonitoringId]) {
+    networkMonitorStore[activeMonitoringId].calls.push(call);
+
+    // Also add to capturedCalls for GET_SNAPSHOT
+    capturedCalls.push(call);
+
+    // FIFO limit
+    if (capturedCalls.length > MAX_NETWORK_CALLS_STORED) {
+      capturedCalls = capturedCalls.slice(-MAX_NETWORK_CALLS_STORED);
+    }
+    if (networkMonitorStore[activeMonitoringId].calls.length > MAX_NETWORK_CALLS_STORED) {
+      networkMonitorStore[activeMonitoringId].calls = networkMonitorStore[activeMonitoringId].calls.slice(-MAX_NETWORK_CALLS_STORED);
+    }
+  }
+}
+
+/**
+ * Execute EXECUTE_JS command
+ */
+async function executeJs(params: ExecuteJsParams, requestId: string): Promise<CommandResult> {
+  const tab = await getTaskWindowTab();
+
+  if (!tab?.id) {
+    return {
+      requestId,
+      success: false,
+      error: 'No active tab in task window',
+    };
+  }
+
+  const tabId = tab.id;
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      resolve({
+        requestId,
+        success: false,
+        data: {
+          success: false,
+          error: 'Script timeout after 5000ms',
+          duration: JS_EXECUTION_TIMEOUT_MS,
+        } as ExecuteJsResult,
+      });
+    }, JS_EXECUTION_TIMEOUT_MS);
+
+    // Use chrome.scripting.executeScript in MV3
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: (script, args) => {
+        // Capture console.log output
+        const logs: string[] = [];
+        const originalLog = console.log;
+        console.log = (...args: unknown[]) => {
+          logs.push(args.map(a => String(a)).join(' '));
+        };
+
+        try {
+          // Execute the script with args in scope
+          const result = new Function('args', `with(args) { return eval(${JSON.stringify(script)}); }`)(args || {});
+          console.log = originalLog;
+          return {
+            success: true,
+            output: logs.join('\n').slice(0, 1000) || (result !== undefined ? String(result).slice(0, 1000) : ''),
+            duration: 0,
+          };
+        } catch (error) {
+          console.log = originalLog;
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            output: logs.join('\n').slice(0, 1000),
+            duration: 0,
+          };
+        }
+      },
+      args: [params.script, params.args || {}],
+    }).then((results) => {
+      clearTimeout(timeoutId);
+      const result = results[0]?.result as ExecuteJsResult | undefined;
+      resolve({
+        requestId,
+        success: result?.success ?? false,
+        data: result,
+      });
+    }).catch((error) => {
+      clearTimeout(timeoutId);
+      resolve({
+        requestId,
+        success: false,
+        data: {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+          duration: JS_EXECUTION_TIMEOUT_MS,
+        } as ExecuteJsResult,
+      });
+    });
+  });
+}
+
+/**
+ * Execute START_NETWORK_MONITORING command
+ */
+async function executeStartNetworkMonitoring(requestId: string): Promise<CommandResult> {
+  // Check if monitoring already active
+  if (activeMonitoringId !== null) {
+    return {
+      requestId,
+      success: false,
+      data: {
+        success: false,
+        monitoringId: activeMonitoringId,
+        message: 'Monitoring already active',
+      } as StartNetworkMonitoringResult,
+    };
+  }
+
+  // Create new monitoring session
+  const monitoringId = 'monitor_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+  networkMonitorStore[monitoringId] = {
+    calls: [],
+    startTime: Date.now(),
+  };
+  activeMonitoringId = monitoringId;
+  capturedCalls = [];
+  lastGetNetworkLogTime = 0;
+
+  // Set up webRequest listener if not already active
+  if (!webRequestListenerActive) {
+    chrome.webRequest.onCompleted.addListener(handleNetworkCompleted, {
+      urls: ['<all_urls>'],
+      types: ['xmlhttprequest'], // Only xmlhttprequest is valid; it captures both XHR and fetch
+    });
+    webRequestListenerActive = true;
+    console.log('[Explorer Extension] WebRequest listener activated');
+  }
+
+  console.log('[Explorer Extension] Network monitoring started:', monitoringId);
+
+  return {
+    requestId,
+    success: true,
+    data: {
+      success: true,
+      monitoringId,
+      message: 'Network monitoring started',
+    } as StartNetworkMonitoringResult,
+  };
+}
+
+/**
+ * Execute GET_NETWORK_LOG command
+ */
+async function executeGetNetworkLog(params: GetNetworkLogParams | undefined, requestId: string): Promise<CommandResult> {
+  const monitoringId = params?.monitoringId || activeMonitoringId;
+
+  // Get the monitoring session
+  const session = monitoringId ? networkMonitorStore[monitoringId] : null;
+  if (!session && monitoringId) {
+    return {
+      requestId,
+      success: false,
+      data: {
+        calls: [],
+        count: 0,
+        hasMore: false,
+      } as GetNetworkLogResult,
+    };
+  }
+
+  // Get calls to return
+  const allCalls = session ? session.calls : capturedCalls;
+
+  // Filter calls if specified
+  let filteredCalls = allCalls;
+
+  if (params?.filter) {
+    const { urlPattern, methods, statusRange } = params.filter;
+
+    filteredCalls = filteredCalls.filter(call => {
+      // URL pattern filter
+      if (urlPattern) {
+        try {
+          const regex = new RegExp(urlPattern);
+          if (!regex.test(call.url)) return false;
+        } catch {
+          // Invalid regex, skip filter
+        }
+      }
+
+      // Method filter
+      if (methods && methods.length > 0) {
+        if (!methods.includes(call.method)) return false;
+      }
+
+      // Status range filter
+      if (statusRange) {
+        const firstDigit = Math.floor(call.status / 100);
+        const rangeMap: Record<string, number> = { '2xx': 2, '3xx': 3, '4xx': 4, '5xx': 5 };
+        if (firstDigit !== rangeMap[statusRange]) return false;
+      }
+
+      return true;
+    });
+  }
+
+  const hasMore = filteredCalls.length > MAX_NETWORK_CALLS_STORED;
+
+  return {
+    requestId,
+    success: true,
+    data: {
+      calls: filteredCalls,
+      count: filteredCalls.length,
+      hasMore,
+    } as GetNetworkLogResult,
+  };
+}
+
+/**
+ * Execute STOP_NETWORK_MONITORING command
+ */
+async function executeStopNetworkMonitoring(params: StopNetworkMonitoringParams, requestId: string): Promise<CommandResult> {
+  const { monitoringId } = params;
+
+  // Validate monitoringId
+  if (!networkMonitorStore[monitoringId]) {
+    return {
+      requestId,
+      success: false,
+      error: 'Invalid monitoringId',
+    };
+  }
+
+  const session = networkMonitorStore[monitoringId];
+  const duration = Date.now() - session.startTime;
+  const totalCallsCaptured = session.calls.length;
+
+  // Clean up monitoring session
+  delete networkMonitorStore[monitoringId];
+
+  // If this was the active monitoring, clear active state and listener
+  if (activeMonitoringId === monitoringId) {
+    activeMonitoringId = null;
+    capturedCalls = [];
+
+    // Remove webRequest listener if no more monitoring sessions
+    if (Object.keys(networkMonitorStore).length === 0 && webRequestListenerActive) {
+      chrome.webRequest.onCompleted.removeListener(handleNetworkCompleted);
+      webRequestListenerActive = false;
+      console.log('[Explorer Extension] WebRequest listener deactivated');
+    }
+  }
+
+  console.log('[Explorer Extension] Network monitoring stopped:', monitoringId, 'Duration:', duration, 'ms, Calls:', totalCallsCaptured);
+
+  return {
+    requestId,
+    success: true,
+    data: {
+      success: true,
+      totalCallsCaptured,
+      duration,
+    } as StopNetworkMonitoringResult,
+  };
+}
+
+// ============================================
 // Extension Installation & Lifecycle
 // ============================================
 
@@ -645,6 +981,76 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     closeTaskWindow();
     sendResponse({ success: true });
     return true;
+  }
+
+  // Debug commands for popup testing (not via HTTP polling)
+  // Return Promise so Chrome handles async response properly
+  if (message.type === 'DEBUG_EXECUTE_JS') {
+    return new Promise((resolve) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tab = tabs[0];
+        if (!tab?.id) {
+          resolve({ success: false, error: 'No active tab' });
+          return;
+        }
+
+        // Inject into MAIN world (the actual page), not content script context
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: 'MAIN', // Execute in the actual page context
+          func: (script) => {
+            try {
+              // Create and execute script element in main world
+              const el = document.createElement('script');
+              el.textContent = script;
+              (document.head || document.documentElement).appendChild(el);
+              el.remove();
+              return { success: true, output: 'alert shown & page turned red' };
+            } catch (e: unknown) {
+              return { success: false, error: String(e) };
+            }
+          },
+          args: [message.script],
+        }).then((results) => {
+          resolve({ success: true, ...results[0]?.result });
+        }).catch((error) => {
+          resolve({ success: false, error: error.message });
+        });
+      });
+    });
+  }
+
+  if (message.type === 'DEBUG_START_MONITOR') {
+    // Force reset any stale monitoring state and start fresh
+    if (webRequestListenerActive) {
+      try {
+        chrome.webRequest.onCompleted.removeListener(handleNetworkCompleted);
+      } catch (e) {
+        // Listener might not be registered
+      }
+      webRequestListenerActive = false;
+    }
+    networkMonitorStore = {};
+    activeMonitoringId = null;
+    capturedCalls = [];
+
+    return executeStartNetworkMonitoring('debug')
+      .then(r => r.data as any)
+      .catch(err => ({ success: false, error: String(err) }));
+  }
+
+  if (message.type === 'DEBUG_GET_NETWORK_LOG') {
+    return executeGetNetworkLog({ monitoringId: message.monitoringId }, 'debug')
+      .then(r => ({ success: r.success, ...r.data }))
+      .catch(err => ({ success: false, error: String(err) }));
+  }
+
+  if (message.type === 'DEBUG_STOP_MONITOR') {
+    return executeStopNetworkMonitoring({ monitoringId: message.monitoringId }, 'debug')
+      .then(r => {
+        return { success: r.success, ...r.data };
+      })
+      .catch(err => ({ success: false, error: String(err) }));
   }
 
   return false;

@@ -111,6 +111,16 @@
       cursor: not-allowed;
     }
 
+    .section-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      margin-top: 8px;
+    }
+
     .footer {
       margin-top: 16px;
       padding-top: 12px;
@@ -158,6 +168,8 @@
     </div>
   </div>
 
+  <div class="section-header">Basic Commands</div>
+
   <div class="commands">
     <button class="command-btn" id="btnSnapshot" disabled>
       <span class="icon">📸</span>
@@ -173,12 +185,33 @@
     </button>
   </div>
 
+  <div class="section-header" style="margin-top: 12px;">Iteration 2 - Debug</div>
+
+  <div class="commands">
+    <button class="command-btn" id="btnExecuteJs" disabled>
+      <span class="icon">⚡</span>
+      <span>EXECUTE_JS: Click H1</span>
+    </button>
+    <button class="command-btn" id="btnStartMonitor">
+      <span class="icon">📡</span>
+      <span>START_MONITOR</span>
+    </button>
+    <button class="command-btn" id="btnGetLog" disabled>
+      <span class="icon">📋</span>
+      <span>GET_NETWORK_LOG</span>
+    </button>
+    <button class="command-btn" id="btnStopMonitor" disabled>
+      <span class="icon">⏹</span>
+      <span>STOP_MONITOR</span>
+    </button>
+  </div>
+
   <div class="log" id="log">
     <div class="log-entry">Extension loaded</div>
   </div>
 
   <div class="footer">
-    Iteration 1 - v1.0.0
+    Iteration 2 - v1.1.0
   </div>
 
   <script src="popup.js"></script>

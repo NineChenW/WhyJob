@@ -20,17 +20,26 @@ export interface ResultPayload {
 }
 
 // Command structure sent to extension
+export type CommandType =
+  | 'NAVIGATE'
+  | 'GET_SNAPSHOT'
+  | 'EXTRACT_DOM'
+  | 'EXECUTE_JS'
+  | 'START_NETWORK_MONITORING'
+  | 'GET_NETWORK_LOG'
+  | 'STOP_NETWORK_MONITORING';
+
 export interface Command {
-  type: 'NAVIGATE' | 'GET_SNAPSHOT' | 'EXTRACT_DOM';
+  type: CommandType;
   requestId: string;
-  params?: NavigateParams | ExtractDomParams;
+  params?: NavigateParams | ExtractDomParams | ExecuteJsParams | GetNetworkLogParams | StopNetworkMonitoringParams;
 }
 
 // Result structure from extension
 export interface CommandResult {
   requestId: string;
   success: boolean;
-  data?: NavigateResult | SnapshotResult | ExtractDomResult;
+  data?: NavigateResult | SnapshotResult | ExtractDomResult | ExecuteJsResult | StartNetworkMonitoringResult | GetNetworkLogResult | StopNetworkMonitoringResult;
   error?: string;
 }
 
@@ -44,6 +53,24 @@ export interface NavigateParams {
 
 export interface ExtractDomParams {
   selectors: Record<string, string>;
+}
+
+export interface ExecuteJsParams {
+  script: string;
+  args?: Record<string, unknown>;
+}
+
+export interface GetNetworkLogParams {
+  monitoringId?: string;
+  filter?: {
+    urlPattern?: string;
+    methods?: string[];
+    statusRange?: '2xx' | '3xx' | '4xx' | '5xx';
+  };
+}
+
+export interface StopNetworkMonitoringParams {
+  monitoringId: string;
 }
 
 // ============================================
@@ -62,7 +89,7 @@ export interface SnapshotResult {
   title: string;
   html: string;
   visibleText: string;
-  networkCalls: NetworkCall[];
+  networkCalls: CapturedNetworkCall[];
   timestamp: Date;
 }
 
@@ -71,6 +98,19 @@ export interface NetworkCall {
   method: string;
   status: number;
   responseType: string;
+}
+
+export interface CapturedNetworkCall {
+  id: string;
+  url: string;
+  method: string;
+  status: number;
+  responseType: 'xhr' | 'fetch' | 'document' | 'other';
+  timing: number;
+  requestHeaders: Record<string, string>;
+  responseHeaders: Record<string, string>;
+  responseBody?: string;
+  timestamp: Date;
 }
 
 export interface ExtractDomResult {
@@ -90,6 +130,42 @@ export interface BoundingRect {
   y: number;
   width: number;
   height: number;
+}
+
+export interface ExecuteJsResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+  duration: number;
+}
+
+export interface StartNetworkMonitoringResult {
+  success: boolean;
+  monitoringId: string;
+  message: string;
+}
+
+export interface GetNetworkLogResult {
+  calls: CapturedNetworkCall[];
+  count: number;
+  hasMore: boolean;
+}
+
+export interface StopNetworkMonitoringResult {
+  success: boolean;
+  totalCallsCaptured: number;
+  duration: number;
+}
+
+// ============================================
+// Network Monitoring State
+// ============================================
+
+export interface NetworkCallStore {
+  [monitoringId: string]: {
+    calls: CapturedNetworkCall[];
+    startTime: number;
+  };
 }
 
 // ============================================
@@ -115,3 +191,5 @@ export const MAX_VISIBLE_TEXT_LENGTH = 5000;
 export const MAX_ELEMENT_TEXT_LENGTH = 200;
 export const MAX_RETRIES = 3;
 export const RETRY_DELAY_MS = 1000;
+export const JS_EXECUTION_TIMEOUT_MS = 5000;
+export const MAX_NETWORK_CALLS_STORED = 500;
