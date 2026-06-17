@@ -21,29 +21,15 @@ Not Started
 
 ## Goals
 
-- [x] Implement LangGraph.js ReAct exploration loop with state channels
-- [x] Build prompt chain architecture (System + Context + ReAct reasoning)
-- [x] Implement Chrome Extension Tool with LangGraph Tool interface
-- [x] Create node implementations (LLM Decision, Tool Execution, Observe, Reflect, CheckTermination, GenerateConfig)
-- [x] Build result parser for tool outputs
-- [x] Set up Memory, Skills, RAG, and MCP extensibility interfaces
+- [ ]
 
 ## Notes
 
-- Based on `context/features/explorer-agent-06-ai-exploration-agent-spec.md`
-- Uses LangGraph.js for agent orchestration following ReAct pattern
-- Chrome Extension integrated as first-class Tool
-- 6 node types: llm_decision, execute_tool, observe_result, reflect, check_termination, generate_config
-- Prompt chain: System Prompt (static) + Context Prompt (dynamic state) + ReAct Reasoning
-- Build passes successfully
+-
 
 ## References
 
-- `context/features/explorer-agent-06-ai-exploration-agent-spec.md` - Full spec
-- `context/features/explorer-agent-01-chrome-extension-spec.md` - Chrome Extension commands, go through the extension code to get actual function of the extension
-- `@docs/ai-assist-fetch-info-plan.md` - System design
-- LangGraph.js: https://langchain-ai.github.io/langgraphjs/
-- ReAct Pattern: https://arxiv.org/abs/2210.03629
+-
 
 ## History
 
