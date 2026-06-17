@@ -1,0 +1,110 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Next.js",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/next",
+      "runtimeArgs": ["dev", "--inspect"],
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Next.js (Turbo)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/next",
+      "runtimeArgs": ["dev", "--turbo", "--inspect"],
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "sourceMaps": true
+    },
+    {
+      "name": "Debug: Attach to Node",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Debug Prisma Studio",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["prisma", "studio"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run Vitest Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "test"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "test"
+      }
+    },
+    {
+      "name": "Run Vitest with Coverage",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "test:coverage"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "test"
+      }
+    },
+    {
+      "name": "Debug Server Actions",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/next",
+      "runtimeArgs": ["dev", "--inspect-brk"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "serverReadyAction": {
+        "action": "openExternal",
+        "pattern": "started server on.*https://(localhost|\\S+):([0-9]+)",
+        "uriTemplate": "https://localhost:%{PORT}/api/health"
+      }
+    },
+    {
+      "name": "Debug Explorer Agent Graph (Inspect)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/lib/ai/agents/explorer/graph.ts",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "--inspect", "${workspaceFolder}/src/lib/ai/agents/explorer/graph.ts"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "console": "integratedTerminal",
+      "env": {
+        "GROQ_API_KEY": "${env:GROQ_API_KEY}",
+        "NODE_ENV": "development"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Full Stack",
+      "configurations": ["Debug Next.js", "Debug: Attach to Node"],
+      "stopAll": true
+    }
+  ]
+}

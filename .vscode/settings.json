@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "settings": {
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.preferences.autoImportFileExcludePatterns": [
+      "node_modules/**"
+    ],
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    },
+    "eslint.validate": [
+      "typescript",
+      "typescriptreact"
+    ],
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[tsx]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "files.associations": {
+      "*.css": "tailwindcss"
+    },
+    "tailwindCSS.includeLanguages": {
+      "typescriptreact": "html"
+    },
+    "emmet.includeLanguages": {
+      "typescriptreact": "html"
+    }
+  }
+}
