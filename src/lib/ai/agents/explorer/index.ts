@@ -17,6 +17,7 @@ export {
   observeResultNode,
   reflectNode,
   generateConfigNode,
+  testConfigNode,
 } from './nodes';
 
 // Tools

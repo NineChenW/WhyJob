@@ -47,6 +47,10 @@ export interface ExplorationState {
   terminationReason?: 'generate_config' | 'fail' | 'max_iterations';
   finalResult?: ExplorationResult;
 
+  // Resume tracking: set to true when an async tool was queued
+  // and we should skip LLM call on re-invoke to complete the pending call
+  waitingForExtensionResult?: boolean;
+
   // Metadata
   startTime: Date;
 }
@@ -94,6 +98,7 @@ export type ExplorationAction =
   | 'GET_NETWORK_LOG'
   | 'STOP_NETWORK_MONITORING'
   | 'ANALYZE_DATA'
+  | 'TEST_API'
   | 'GENERATE_CONFIG'
   | 'FAIL'
   | 'REFLECT';
@@ -175,6 +180,8 @@ export interface ToolCall {
   error?: string;
   timestamp: Date;
   duration: number;
+  requestId?: string; // For async tool correlation (extension results)
+  status?: 'pending' | 'completed' | 'failed';
 }
 
 /**

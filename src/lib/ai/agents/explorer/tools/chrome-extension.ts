@@ -7,6 +7,10 @@ import type { ExplorationAction, ToolInput, ToolOutput } from '../types';
  *
  * This tool provides browser automation capabilities for web exploration.
  * It communicates with a Chrome Extension via HTTP commands.
+ *
+ * Two invocation modes:
+ * - invoke(): synchronous (waits for result) - use for TEST_API
+ * - postCommand(): async (queues command, returns requestId immediately) - use for browser tools
  */
 export class ChromeExtensionTool {
   name = 'chrome_extension';
@@ -22,13 +26,11 @@ export class ChromeExtensionTool {
   }
 
   /**
-   * Invoke a tool action
+   * Synchronous invoke - waits for result (use for TEST_API)
    */
   async invoke(input: ToolInput): Promise<ToolOutput> {
     const { action, params = {} } = input;
-    this.requestCounter++;
-
-    const requestId = `req-${this.requestCounter}-${Date.now()}`;
+    const requestId = this.buildRequestId();
     const command = this.buildCommand(action, params, requestId);
 
     // Send command to server relay
@@ -38,6 +40,51 @@ export class ChromeExtensionTool {
     const result = await this.waitForResult(requestId, 30000);
 
     return result as ToolOutput;
+  }
+
+  /**
+   * Post command to extension queue (async - returns requestId immediately)
+   * Use this for browser tools like NAVIGATE, GET_SNAPSHOT, etc.
+   * The caller should log state with status=0 and return early.
+   * Use waitForResult() separately to poll for the result.
+   */
+  async postCommand(input: ToolInput): Promise<string> {
+    const { action, params = {} } = input;
+    const requestId = this.buildRequestId();
+    const command = this.buildCommand(action, params, requestId);
+
+    await this.sendCommand(command);
+
+    return requestId;
+  }
+
+  /**
+   * Wait for a result from a previously posted command
+   */
+  async waitForResult(requestId: string, timeoutMs = 30000): Promise<ToolOutput> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(
+        `${this.serverUrl}/api/agent/results?taskId=${this.taskId}&requestId=${requestId}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.result) {
+          return data.result;
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    throw new Error(`Timeout waiting for result: ${requestId}`);
+  }
+
+  private buildRequestId(): string {
+    this.requestCounter++;
+    return `req-${this.requestCounter}-${Date.now()}`;
   }
 
   private buildCommand(
@@ -77,26 +124,5 @@ export class ChromeExtensionTool {
     if (!response.ok) {
       throw new Error(`Failed to send command: ${response.statusText}`);
     }
-  }
-
-  private async waitForResult(requestId: string, timeoutMs: number): Promise<ToolOutput> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
-      const response = await fetch(
-        `${this.serverUrl}/api/agent/results?taskId=${this.taskId}&requestId=${requestId}`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.result) {
-          return data.result;
-        }
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-
-    throw new Error(`Timeout waiting for result: ${requestId}`);
   }
 }

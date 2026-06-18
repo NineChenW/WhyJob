@@ -1,13 +1,19 @@
 /**
  * Explorer Agent Results API
  *
- * POST /api/agent/results
+ * GET /api/agent/results?taskId=xxx&requestId=yyy  → Poll for result
+ * POST /api/agent/results                          → Extension posts result
+ *
+ * The GET handler allows ChromeExtensionTool to poll for results.
+ * The POST handler receives results from the Chrome Extension and
+ * triggers async resume for hanging tasks.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Discovery } from '@/lib/db/explorer';
 import { analyzeActionResult, type ActionResult } from '@/lib/ai/agents/explorer-act';
+import { getLatestStateLog, updateStateLog, type StateLogNote } from '@/lib/ai/state-log';
 
 interface ResultPayload {
   extensionId: string;
@@ -21,6 +27,71 @@ interface ResultPayload {
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * GET /api/agent/results?taskId=xxx&requestId=yyy
+ * ChromeExtensionTool polls for result by requestId.
+ * Returns the stored result from the state log.
+ */
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const taskId = searchParams.get('taskId');
+  const requestId = searchParams.get('requestId');
+
+  if (!taskId) {
+    return NextResponse.json({ error: 'taskId required' }, { status: 400 });
+  }
+
+  if (!requestId) {
+    return NextResponse.json({ error: 'requestId required' }, { status: 400 });
+  }
+
+  // Find the state log entry for this requestId
+  const log = await getLatestStateLog(taskId);
+
+  if (!log) {
+    // No log entry yet - return empty to trigger polling
+    return NextResponse.json({});
+  }
+
+  // Check if the log has result data for this requestId
+  const note = log.note as StateLogNote | null;
+  if (note?.toolCall?.output !== undefined || note?.toolCall?.error !== undefined) {
+    // Extract requestId from the tool call to match
+    const noteRequestId = note.asyncTool?.requestId;
+    if (noteRequestId === requestId) {
+      return NextResponse.json({
+        result: {
+          success: !note.toolCall?.error,
+          data: note.toolCall?.output,
+          error: note.toolCall?.error,
+          requestId,
+        },
+      });
+    }
+  }
+
+  // Also check if status=1 (completed) but we haven't matched requestId yet
+  // This handles the case where multiple results come in
+  if (log.status === 1 && note?.asyncTool?.waitingForResult === false) {
+    return NextResponse.json({
+      result: {
+        success: !note.toolCall?.error,
+        data: note.toolCall?.output,
+        error: note.toolCall?.error,
+        requestId: note.asyncTool?.requestId,
+      },
+    });
+  }
+
+  // No result yet - return empty to continue polling
+  return NextResponse.json({});
+}
+
+/**
+ * POST /api/agent/results
+ * Receives tool execution results from Chrome Extension.
+ * Updates state log and triggers resume for hanging tasks.
+ */
 export async function POST(request: NextRequest) {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] [Results] Received results request`);
@@ -44,17 +115,60 @@ export async function POST(request: NextRequest) {
         error: result.error,
       });
 
-      // Extract taskId from requestId (format: "taskId-timestamp")
+      // Extract taskId from requestId (format: "taskId-iteration-timestamp")
       const requestIdParts = result.requestId.split('-');
       if (requestIdParts.length < 2) {
         console.log(`[${timestamp}] [Results] Invalid requestId format: ${result.requestId}`);
         continue;
       }
 
-      const taskId = requestIdParts.slice(0, -1).join('-');
+      const taskId = requestIdParts.slice(0, -2).join('-'); // Remove last 2 segments (iteration, timestamp)
       console.log(`[${timestamp}] [Results] Extracted taskId: ${taskId}`);
 
-      // Get current task state
+      // Find hanging log entry for this task
+      const hangingLog = await getLatestStateLog(taskId);
+
+      if (hangingLog && hangingLog.status === 0) {
+        // Update the hanging log with the result and set status=1 (Done)
+        const existingNote = (hangingLog.note as StateLogNote) || {};
+        // Preserve required tool and input from existing toolCall, add output/error
+        const existingToolCall = existingNote.toolCall as { tool: string; input: unknown; output?: unknown; error?: string } | undefined;
+        const existingAsyncTool = existingNote.asyncTool as { toolName: string; requestId: string; commandQueued: boolean; waitingForResult: boolean } | undefined;
+        const updatedNote: StateLogNote = {
+          ...existingNote,
+          toolCall: {
+            tool: existingToolCall?.tool ?? 'unknown',
+            input: existingToolCall?.input ?? {},
+            output: result.data,
+            error: result.error,
+          },
+          asyncTool: {
+            toolName: existingAsyncTool?.toolName ?? 'chrome_extension',
+            requestId: existingAsyncTool?.requestId ?? result.requestId,
+            commandQueued: existingAsyncTool?.commandQueued ?? true,
+            waitingForResult: false,
+          },
+        };
+
+        await updateStateLog(hangingLog.id, {
+          status: 1,
+          nextNode: 'observe_result',
+          note: updatedNote,
+        });
+
+        console.log(`[${timestamp}] [Results] Updated hanging log ${hangingLog.id} with result, status=1`);
+
+        // Trigger resume: update FetchTask status to 'exploring'
+        // This signals the server action to re-invoke the graph
+        await prisma.fetchTask.updateMany({
+          where: { id: taskId, status: { in: ['pending', 'exploring'] } },
+          data: { status: 'exploring' },
+        });
+
+        console.log(`[${timestamp}] [Results] Triggered resume for task ${taskId}`);
+      }
+
+      // Also process via existing FetchTask logic (for backward compatibility)
       const task = await prisma.fetchTask.findUnique({
         where: { id: taskId },
       });
@@ -138,7 +252,7 @@ export async function POST(request: NextRequest) {
         discoveriesCount: discoveries.length,
       });
 
-      // Update task state
+      // Update task state (only if not already updated by resume trigger)
       await prisma.fetchTask.update({
         where: { id: taskId },
         data: {

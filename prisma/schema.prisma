@@ -218,6 +218,25 @@ model Content {
 // Explorer Agent Models
 // ============================================
 
+// Incremental state log for AI agent resumability
+model AgentStateLog {
+  id        String   @id @default(cuid())
+  taskId    String   // Task being executed
+  agent     String   // Agent name (e.g., "explorer", "resume", "interview")
+  node      String   // Node name (e.g., "llm_decision", "execute_tool")
+  state     Json     // Full state snapshot at this point
+  note      Json?    // Additional notes (decision reasoning, errors, etc.)
+  nextNode  String?  // Next node to execute (null if current is terminal)
+  status    Int      @default(1) // 1=Done, 0=Hang up waiting for async
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId, createdAt])
+  @@index([agent, taskId])
+  @@index([taskId, status])
+}
+
 // Task queue for company data fetching
 model FetchTask {
   id           String   @id @default(cuid())

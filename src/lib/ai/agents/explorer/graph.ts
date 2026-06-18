@@ -122,6 +122,7 @@ export function createExplorerGraph() {
     observeResultNode,
     reflectNode,
     generateConfigNode,
+    testConfigNode,
   } = require('./nodes');
 
   // Add nodes
@@ -131,6 +132,7 @@ export function createExplorerGraph() {
   graph.addNode('observe_result', observeResultNode);
   graph.addNode('reflect', reflectNode);
   graph.addNode('generate_config', generateConfigNode);
+  graph.addNode('test_config', testConfigNode);
 
   // Define edges
   graph.addEdge(START, 'llm_decision');
@@ -154,8 +156,9 @@ export function createExplorerGraph() {
   graph.addEdge('observe_result', 'reflect');
   graph.addEdge('reflect', 'llm_decision');
 
-  // Config generation ends the graph
-  graph.addEdge('generate_config', END);
+  // Config generation: generate_config → test_config → END
+  graph.addEdge('generate_config', 'test_config');
+  graph.addEdge('test_config', END);
 
   return graph;
 }

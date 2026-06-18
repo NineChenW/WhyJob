@@ -17,8 +17,34 @@ import type { ExplorationState, ReActStep } from '../types';
  *
  * Builds prompt chain from current state and calls the configured AI provider
  * to get the next ReAct action decision.
+ *
+ * Resume handling: if a pending tool call exists from a previous invocation,
+ * skip LLM call and return RESUME decision to complete it.
  */
 export async function llmDecisionNode(state: ExplorationState): Promise<Partial<ExplorationState>> {
+  // Resume handling: if waiting for extension result (async tool queued) OR
+  // a pending tool call exists, skip LLM and return NOOP to complete it.
+  if (state.waitingForExtensionResult || state.toolCalls.some((c) => c.status === 'pending')) {
+    // Return NOOP decision - will be routed to execute_tool to complete pending call
+    return {
+      currentDecision: {
+        action: 'REFLECT', // Non-terminal, will route to execute_tool
+        reasoning: 'Waiting for extension result to complete - checking for pending call',
+        confidence: 80,
+      },
+      reactTrace: [
+        ...state.reactTrace,
+        {
+          stepNumber: state.reactTrace.length + 1,
+          thought: 'Waiting for extension result - will resume pending tool call',
+          action: 'REFLECT',
+          timestamp: new Date(),
+        },
+      ],
+      shouldContinue: true,
+    };
+  }
+
   // Build prompt chain: System + Context + ReAct
   const { systemPrompt, userPrompt } = buildPromptChain({
     state,
