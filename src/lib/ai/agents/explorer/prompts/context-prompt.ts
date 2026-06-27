@@ -1,60 +1,60 @@
 // src/lib/ai/agents/explorer/prompts/context-prompt.ts
 
+/**
+ * Build context prompt from current exploration state
+ */
+
 import type { ExplorationState, PageVisit, Discovery, NetworkCall, ExplorationError } from '../types';
+import { ExplorationStateWrapper } from '../domain';
 
 /**
  * Build context prompt from current exploration state
  */
 export function buildContextPrompt(input: { state: ExplorationState }): string {
-  const { state } = input;
-  const {
-    company,
-    contentTypes,
-    iteration,
-    maxIterations,
-    pagesVisited,
-    discoveries,
-    networkCalls,
-    errors,
-    reactTrace,
-    currentUrl,
-  } = state;
+  const wrapper = new ExplorationStateWrapper(input.state);
+
+  const task = wrapper.task;
+  const iteration = wrapper.iteration;
+  const memory = wrapper.memory;
+  const context = wrapper.context;
+  const snapshots = wrapper.history.snapshots;
 
   // Format pages visited
-  const pagesText = formatPagesVisited(pagesVisited);
+  const pagesText = formatPagesVisited(memory.pagesVisited);
 
   // Format discoveries
-  const discoveriesText = formatDiscoveries(discoveries);
+  const discoveriesText = formatDiscoveries(memory.discoveries);
 
   // Format network calls (show most relevant)
+  const networkCalls = wrapper.history.allNetworkCalls;
   const networkText = formatNetworkCalls(networkCalls);
 
   // Format errors
-  const errorsText = formatErrors(errors);
+  const errorsText = formatErrors(memory.errors);
 
-  // Format ReAct trace
-  const traceText = formatReActTrace(reactTrace);
+  // Format ReAct trace (last 3 snapshots)
+  const traceText = formatReActTrace(snapshots);
 
   return `## Current Exploration Task
 
-**Company**: ${company.name} ${company.industry ? `(${company.industry})` : ''}
-**Website**: ${company.website || 'Unknown - discover from search'}
-**Target Content**: ${contentTypes.join(', ')}
-**Current URL**: ${currentUrl || 'None yet'}
+**Company**: ${task.company.name} ${task.company.industry ? `(${task.company.industry})` : ''}
+**Website**: ${task.companyWebsite || 'Unknown - discover from search'}
+**Target Content**: ${task.contentTypes.join(', ')}
+**Current URL**: ${context.currentUrl || 'None yet'}
 
 ## Iteration Progress
 
-- **Iteration**: ${iteration + 1} of ${maxIterations}
-- **Pages Visited**: ${pagesVisited.length}
+- **Iteration**: ${iteration.iteration + 1} of ${iteration.maxIterations}
+- **Pages Visited**: ${memory.pagesVisited.length}
 ${pagesText}
 
-- **Discoveries**: ${discoveries.length}
+- **Discoveries**: ${memory.discoveryCount}
 ${discoveriesText}
 
 - **Network Calls Captured**: ${networkCalls.length}
 ${networkText}
 
-- **Errors**: ${errors.length}
+- **Errors**: ${memory.errors.length}
 ${errorsText}
 
 ## ReAct Reasoning Trace
@@ -133,19 +133,19 @@ function formatErrors(errors: ExplorationError[]): string {
     .join('\n');
 }
 
-function formatReActTrace(trace: ExplorationState['reactTrace']): string {
-  if (trace.length === 0) return '  (Fresh start - no reasoning yet)';
+function formatReActTrace(snapshots: import('../types').IterationSnapshot[]): string {
+  if (snapshots.length === 0) return '  (Fresh start - no reasoning yet)';
 
-  return trace
+  return snapshots
     .slice(-3)
     .map((step) => {
       let text = `Step ${step.stepNumber}: ${step.thought}`;
-      text += `\n  Action: ${step.action}`;
+      text += `\n  Action: ${step.decision?.action}`;
       if (step.observation) {
         text += `\n  Observation: ${step.observation}`;
       }
-      if (step.reflection) {
-        text += `\n  Reflection: ${step.reflection}`;
+      if (step.reflectionNotes) {
+        text += `\n  Reflection: ${step.reflectionNotes}`;
       }
       return text;
     })

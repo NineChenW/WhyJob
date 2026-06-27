@@ -25,6 +25,7 @@
     "@hookform/resolvers": "^5.4.0",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.3",
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",

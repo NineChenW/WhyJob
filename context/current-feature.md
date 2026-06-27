@@ -13,26 +13,36 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
+# Test Agent 01 - init LLM node
+
 # Current Feature
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-- [ ]
+- [ ] Create basic LangGraph agent structure with object-oriented design
+- [ ] Implement LLM node using NVIDIA AI provider
+- [ ] Set up test infrastructure for the agent
+- [ ] Verify build passes and tests pass
 
 ## Notes
 
--
+- Use NVIDIA AI as the LLM provider (nvidia embeddings / chat models)
+- Object-oriented approach for the agent structure
+- Reference LangGraph official documentation
 
 ## References
 
--
+- Spec: `context/features/test-agent-01-init-llm-spec.md`
+- LangGraph Docs: https://langchain-ai.github.io/langgraph/
 
 ## History
 
+- **2026-06-22**: Explorer Agent - Checkpointer + Interrupt (Iteration 12) - Add PostgresSaver checkpointer, use interrupt() for async pause/resume, remove all AgentStateLog dependencies. Build passes, tests pass.
+- **2026-06-19**: Explorer Agent - LangGraph Wiring (Iteration 11) - runExplorerGraph resume mode, pickup/process endpoints wired to LangGraph, Commands GET returns queued commands. Build passes, 149 tests pass.
 - **2026-06-18**: Explorer Agent - AI Agent Integration (Iteration 10) - AgentStateLog model, state-log.ts, async execute_tool with hang/resume, test_config node, Results API resume trigger. Build passes, 149 tests pass.
 - **2026-06-16**: Explorer Agent - AI Exploration Agent (Iteration 6) - LangGraph ReAct implementation with 6 nodes, Groq integration, Chrome Extension Tool, FetchConfig generator. Build passes.
 - **2026-06-15**: Explorer Agent - Chrome Extension (Iteration 2) - EXECUTE_JS, START/GET/STOP_NETWORK_MONITORING commands. 4 new commands, 34 tests, build passes. Manual testing via popup debug UI.

@@ -42,7 +42,9 @@ let lastPollTime = 0;
 let currentTaskId: string | null = null;
 let currentTaskWindowId: number | null = null; // Window dedicated to current task
 let pendingCommandId: string | null = null; // Track if we're waiting for command to execute
-let pollInterval: ReturnType<typeof setInterval> | null = null;
+let isProcessingCycle = false; // Prevent overlapping poll cycles
+const MAX_RECENTLY_EXECUTED = 10;
+let recentlyExecutedIds: string[] = []; // Track last N executed requestIds for deduplication
 
 // Network monitoring state
 let networkMonitorStore: NetworkCallStore = {};
@@ -232,7 +234,8 @@ async function closeTaskWindow(): Promise<void> {
 // ============================================
 
 /**
- * Start polling for commands
+ * Start polling for commands using recursive async loop (not setInterval)
+ * This ensures each poll cycle completes before the next one starts
  */
 async function startPolling(): Promise<void> {
   if (isPolling) return;
@@ -240,16 +243,43 @@ async function startPolling(): Promise<void> {
   isPolling = true;
   console.log('[Explorer Extension] Starting poll loop');
 
+  // Initial pickup attempt
   await attemptPickup();
 
-  pollInterval = setInterval(pollLoop, config.pollIntervalMs);
+  // Use recursive async loop instead of setInterval to prevent overlapping cycles
+  pollLoopRecursive();
+}
+
+let pollLoopRunning = false;
+
+/**
+ * Recursive poll loop - waits for each cycle to complete before starting next
+ */
+async function pollLoopRecursive(): Promise<void> {
+  if (!isPolling || pollLoopRunning) return;
+
+  pollLoopRunning = true;
+
+  try {
+    await pollLoopIteration();
+  } catch (error) {
+    console.error('[Explorer Extension] Poll loop error:', error);
+  } finally {
+    pollLoopRunning = false;
+  }
+
+  // Schedule next cycle only if still polling
+  if (isPolling) {
+    setTimeout(pollLoopRecursive, config.pollIntervalMs);
+  }
 }
 
 /**
  * Attempt to pick up a task and create a window for it
  */
 async function attemptPickup(): Promise<boolean> {
-  if (currentTaskId && pendingCommandId) {
+  // If we're already processing a command, don't try to pick up a new task
+  if (currentTaskId && (pendingCommandId || isProcessingCycle)) {
     return true;
   }
 
@@ -274,16 +304,27 @@ async function attemptPickup(): Promise<boolean> {
 }
 
 /**
- * Single poll iteration
+ * Single poll iteration (called by pollLoopRecursive)
  */
-async function pollLoop(): Promise<void> {
+async function pollLoopIteration(): Promise<void> {
   if (!isPolling) return;
 
-  if (pendingCommandId) {
+  // Skip if already executing a command
+  if (isProcessingCycle) {
+    console.log('[Explorer Extension] Skipping poll - already processing previous cycle');
     return;
   }
 
+  // If we were waiting for a command to complete but it has been a while,
+  // something went wrong - reset pending state
+  if (pendingCommandId) {
+    console.log('[Explorer Extension] Resetting stuck pendingCommandId:', pendingCommandId);
+    pendingCommandId = null;
+  }
+
   try {
+    isProcessingCycle = true;
+
     // 1. If no current task, try to pick one up
     if (!currentTaskId) {
       const pickupResult = await pickupTask();
@@ -297,32 +338,46 @@ async function pollLoop(): Promise<void> {
         await createTaskWindow();
       } else {
         currentTaskId = null;
-        return;
+        return; // No task available, wait for next cycle
       }
     }
 
     // 2. Poll for commands
-    const commands = await pollCommands();
+    const allCommands = await pollCommands();
+
+    // 2a. Filter out commands already executed (deduplication)
+    const commands = allCommands.filter(cmd => {
+      if (recentlyExecutedIds.includes(cmd.requestId)) {
+        console.log(`[Explorer Extension] Ignoring duplicate command: ${cmd.type} (${cmd.requestId})`);
+        return false;
+      }
+      return true;
+    });
 
     if (commands.length === 0) {
-      // No commands - task done or waiting for something
-      pendingCommandId = null;
-      // Don't nullify currentTaskId here - let pollCommands handle task completion
-      // which will close the window
+      // No commands available - might be task completion or waiting for graph
       return;
     }
 
-    // 3. Execute command and mark as pending
-    pendingCommandId = commands[0].requestId;
-    console.log(`[Explorer Extension] Executing: ${commands[0].type} (${commands[0].requestId})`);
+    // 3. Execute command synchronously
+    const cmdToExecute = commands[0];
+    pendingCommandId = cmdToExecute.requestId;
+    console.log(`[Explorer Extension] Executing: ${cmdToExecute.type} (${cmdToExecute.requestId})`);
 
-    const results = await executeCommands(commands);
+    const results = await executeCommands([cmdToExecute]);
     await postResults(results);
 
-    pendingCommandId = null;
+    // 4. Track executed command ID for deduplication
+    recentlyExecutedIds.push(cmdToExecute.requestId);
+    if (recentlyExecutedIds.length > MAX_RECENTLY_EXECUTED) {
+      recentlyExecutedIds.shift();
+    }
+
   } catch (error) {
-    console.error('[Explorer Extension] Poll loop error:', error);
+    console.error('[Explorer Extension] Poll iteration error:', error);
+  } finally {
     pendingCommandId = null;
+    isProcessingCycle = false;
   }
 }
 

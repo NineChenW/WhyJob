@@ -3,8 +3,12 @@
 /**
  * Explorer Agent Constants
  */
+
+// ============================================
+// Iteration Control
+// ============================================
+
 export const EXPLORER_CONSTANTS = {
-  // Iteration control
   DEFAULT_MAX_ITERATIONS: 5,
   MIN_ITERATIONS_BEFORE_FAIL: 2,
   MAX_CONSECUTIVE_ERRORS: 3,
@@ -25,9 +29,76 @@ export const EXPLORER_CONSTANTS = {
   CONFIDENCE_PENALTY_LOW: 10,
 } as const;
 
-/**
- * Exploration actions that don't require tool execution
- */
+// ============================================
+// Termination Reasons (Domain Constants)
+// ============================================
+
+export const TERMINATION_REASON = {
+  GENERATE_CONFIG: 'generate_config' as const,
+  FAIL: 'fail' as const,
+  MAX_ITERATIONS: 'max_iterations' as const,
+} as const;
+
+export type TerminationReason = typeof TERMINATION_REASON[keyof typeof TERMINATION_REASON];
+
+// ============================================
+// Exploration Actions
+// ============================================
+
+export const EXPLORATION_ACTION = {
+  NAVIGATE: 'NAVIGATE',
+  GET_SNAPSHOT: 'GET_SNAPSHOT',
+  EXTRACT_DOM: 'EXTRACT_DOM',
+  EXECUTE_JS: 'EXECUTE_JS',
+  START_NETWORK_MONITORING: 'START_NETWORK_MONITORING',
+  GET_NETWORK_LOG: 'GET_NETWORK_LOG',
+  STOP_NETWORK_MONITORING: 'STOP_NETWORK_MONITORING',
+  ANALYZE_DATA: 'ANALYZE_DATA',
+  TEST_API: 'TEST_API',
+  GENERATE_CONFIG: 'GENERATE_CONFIG',
+  FAIL: 'FAIL',
+  REFLECT: 'REFLECT',
+} as const;
+
+// ============================================
+// Discovery Types
+// ============================================
+
+export const DISCOVERY_TYPE = {
+  API_ENDPOINT: 'api_endpoint',
+  WEBPAGE: 'webpage',
+  JOB_DATA: 'job_data',
+  CULTURE_DATA: 'culture_data',
+  REQUIRES_AUTH: 'requires_auth',
+  JAVASCRIPT_REQUIRED: 'javascript_required',
+  NO_CONTENT: 'no_content',
+} as const;
+
+// ============================================
+// Exploration Status
+// ============================================
+
+export const EXPLORATION_STATUS = {
+  IN_PROGRESS: 'in_progress',
+  COMPLETE: 'complete',
+  FAILED: 'failed',
+  MAX_ITERATIONS: 'max_iterations',
+} as const;
+
+// ============================================
+// Tool Call Status
+// ============================================
+
+export const TOOL_CALL_STATUS = {
+  PENDING: 'pending',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const;
+
+// ============================================
+// Exploration actions that don't require tool execution
+// ============================================
+
 export const TERMINAL_ACTIONS = ['GENERATE_CONFIG', 'FAIL'] as const;
 
 /**

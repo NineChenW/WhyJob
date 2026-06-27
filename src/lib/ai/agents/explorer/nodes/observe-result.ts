@@ -1,8 +1,5 @@
 // src/lib/ai/agents/explorer/nodes/observe-result.ts
 
-import { parseToolResult } from '../result-parser';
-import type { ExplorationState } from '../types';
-
 /**
  * Observe Result Node
  *
@@ -10,31 +7,51 @@ import type { ExplorationState } from '../types';
  * - Discoveries (API endpoints, job data, etc.)
  * - Network calls
  * - Page visits
- * - Updated state (currentUrl, monitoringId)
+ * - Updated context (currentUrl, monitoringId)
  */
-export async function observeResultNode(state: ExplorationState): Promise<Partial<ExplorationState>> {
-  const { currentDecision, toolCalls } = state;
 
-  if (!currentDecision || toolCalls.length === 0) {
-    return {};
+import { parseToolResult } from '../result-parser';
+import { ExplorationStateWrapper } from '../domain';
+import { createNode } from '../node-wrapper';
+
+/**
+ * Observe Result Node
+ *
+ * Parses the last tool call output and extracts discoveries, network calls,
+ * page visits, and updates the wrapper state accordingly.
+ */
+export const observeResultNode = createNode(async (wrapper: ExplorationStateWrapper) => {
+  const lastDecision = wrapper.lastDecision;
+  const lastSnapshot = wrapper.history.lastSnapshot;
+
+  if (!lastDecision || !lastSnapshot?.toolCall) {
+    return wrapper;
   }
 
-  const lastCall = toolCalls[toolCalls.length - 1];
-  const parsed = parseToolResult(currentDecision.action, lastCall.output, lastCall.error);
-
-  // Update ReAct trace with observation
-  const updatedTrace = state.reactTrace.map((step, i) =>
-    i === state.reactTrace.length - 1
-      ? { ...step, observation: parsed.observation }
-      : step
+  const toolCall = lastSnapshot.toolCall;
+  const parsed = parseToolResult(
+    lastDecision.action,
+    toolCall.output,
+    toolCall.error
   );
 
-  return {
-    reactTrace: updatedTrace,
-    pagesVisited: parsed.pageVisit ? [parsed.pageVisit] : [],
-    discoveries: parsed.discoveries,
-    networkCalls: parsed.networkCalls,
-    currentUrl: parsed.currentUrl ?? state.currentUrl,
-    pendingMonitoringId: parsed.monitoringId ?? state.pendingMonitoringId,
-  };
-}
+  // Set observation on the last snapshot
+  wrapper.setObservation(parsed.observation);
+
+  // Add discoveries if any found
+  if (parsed.discoveries.length > 0) {
+    wrapper.addDiscoveries(parsed.discoveries);
+  }
+
+  // Record page visit if navigating
+  if (parsed.pageVisit) {
+    wrapper.navigateTo(parsed.pageVisit.url, parsed.pageVisit.title);
+  }
+
+  // Update monitoring ID if returned
+  if (parsed.monitoringId) {
+    wrapper.setMonitoringId(parsed.monitoringId);
+  }
+
+  return wrapper;
+});

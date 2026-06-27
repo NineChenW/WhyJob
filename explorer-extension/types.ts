@@ -185,7 +185,7 @@ export const DEFAULT_CONFIG: PollingConfig = {
 };
 
 // Constants
-export const NAVIGATION_TIMEOUT_MS = 10000;
+export const NAVIGATION_TIMEOUT_MS = 20000;
 export const NETWORK_IDLE_TIMEOUT_MS = 5000;
 export const MAX_VISIBLE_TEXT_LENGTH = 5000;
 export const MAX_ELEMENT_TEXT_LENGTH = 200;

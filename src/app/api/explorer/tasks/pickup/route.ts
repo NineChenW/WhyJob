@@ -8,6 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { runExplorerGraph, initializeExplorationState } from '@/lib/ai/agents/explorer/graph';
+import { ExplorationStateWrapper } from '@/lib/ai/agents/explorer/domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +57,11 @@ export async function POST(_request: NextRequest) {
       });
     }
 
+    // Fetch company info for the exploration
+    const company = await prisma.company.findUnique({
+      where: { id: pendingTask.companyId },
+    });
+
     console.log(`[${timestamp}] [Pickup] Found pending task: ${pendingTask.id}, updating to 'exploring'...`);
 
     // Update task to exploring status
@@ -67,6 +74,51 @@ export async function POST(_request: NextRequest) {
 
     console.log(`[${timestamp}] [Pickup] Task ${updatedTask.id} is now 'exploring'`);
 
+    // Start the LangGraph explorer agent (fire-and-forget)
+    // The graph will return when it needs extension results (waitingForExtensionResult)
+    // or reaches a terminal state (generate_config, fail, max_iterations)
+    const serverUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const state = initializeExplorationState({
+      taskId: updatedTask.id,
+      companyId: updatedTask.companyId,
+      company: {
+        id: company?.id ?? updatedTask.companyId,
+        name: company?.name ?? 'Unknown',
+        website: company?.website ?? undefined,
+        industry: company?.industry ?? undefined,
+      },
+      contentTypes: (updatedTask.contentTypes as string[]) as any[],
+      maxIterations: 5,
+    });
+
+    console.log(`[${timestamp}] [Pickup] Starting runExplorerGraph for task ${updatedTask.id}...`);
+
+    // Run the graph (async - don't block the response)
+    // If the graph needs extension results, it will return with waitingForExtensionResult=true
+    // The extension will poll Commands GET to get the queued command, then POST results
+    runExplorerGraph(state, serverUrl)
+      .then((result) => {
+        const wrapper = new ExplorationStateWrapper(result);
+        console.log(`[${timestamp}] [Pickup] runExplorerGraph completed for task ${updatedTask.id}:`, {
+          shouldContinue: wrapper.iteration.shouldContinue,
+          terminationReason: wrapper.iteration.terminationReason,
+          discoveriesCount: wrapper.memory.discoveryCount,
+          finalResult: wrapper.result ? 'present' : 'none',
+        });
+      })
+      .catch((error) => {
+        console.error(`[${timestamp}] [Pickup] runExplorerGraph error for task ${updatedTask.id}:`, error);
+        // Mark task as failed
+        prisma.fetchTask.update({
+          where: { id: updatedTask.id },
+          data: {
+            status: 'failed',
+            reason: error instanceof Error ? error.message : 'Graph execution failed',
+            completedAt: new Date(),
+          },
+        }).catch(console.error);
+      });
+
     return NextResponse.json({
       pickedUp: true,
       alreadyProcessing: false,
@@ -76,7 +128,7 @@ export async function POST(_request: NextRequest) {
         contentTypes: updatedTask.contentTypes,
         status: updatedTask.status,
       },
-      message: 'Task picked up. Poll commands API with taskId for next steps.',
+      message: 'Exploration started. Poll commands API with taskId for next steps.',
     });
   } catch (error) {
     console.error(`[${timestamp}] [Pickup] Failed to pickup task:`, error);

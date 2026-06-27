@@ -6,87 +6,6 @@
 export type ContentType = 'company_culture' | 'job_listing' | 'company_wechat';
 
 /**
- * Exploration state for LangGraph
- */
-export interface ExplorationState {
-  // Task Context
-  taskId: string;
-  companyId: string;
-  company: {
-    id: string;
-    name: string;
-    website?: string;
-    industry?: string;
-  };
-  contentTypes: ContentType[];
-
-  // Iteration Control
-  iteration: number;
-  maxIterations: number;
-
-  // Memory & History
-  pagesVisited: PageVisit[];
-  discoveries: Discovery[];
-  networkCalls: NetworkCall[];
-  toolCalls: ToolCall[];
-  errors: ExplorationError[];
-
-  // ReAct Trace (the reasoning chain)
-  reactTrace: ReActStep[];
-
-  // Agent State
-  currentUrl?: string;
-  pendingMonitoringId?: string;
-
-  // Decision from LLM
-  currentDecision?: LLMSDecision;
-  reflectionNotes?: string;
-
-  // Termination
-  shouldContinue: boolean;
-  terminationReason?: 'generate_config' | 'fail' | 'max_iterations';
-  finalResult?: ExplorationResult;
-
-  // Resume tracking: set to true when an async tool was queued
-  // and we should skip LLM call on re-invoke to complete the pending call
-  waitingForExtensionResult?: boolean;
-
-  // Metadata
-  startTime: Date;
-}
-
-/**
- * ReAct reasoning step
- */
-export interface ReActStep {
-  stepNumber: number;
-  thought: string; // Reasoning about current state
-  action: string; // Action decided
-  actionInput?: unknown; // Input to the action
-  observation?: string; // Result of action (filled after tool execution)
-  reflection?: string; // Self-correction notes
-  timestamp: Date;
-}
-
-/**
- * LLM decision output
- */
-export interface LLMSDecision {
-  action: ExplorationAction;
-  target?: {
-    url?: string;
-    selectors?: Record<string, string>;
-    script?: string;
-    args?: Record<string, unknown>;
-    monitoringId?: string;
-    filter?: NetworkFilter;
-  };
-  reasoning: string;
-  confidence: number;
-  reflectionPrompt?: string;
-}
-
-/**
  * Available exploration actions
  */
 export type ExplorationAction =
@@ -174,13 +93,13 @@ export interface NetworkCall {
  * Tool call record
  */
 export interface ToolCall {
-  tool: ExplorationAction;
+  type: ExplorationAction;
   input: Record<string, unknown>;
   output: unknown;
   error?: string;
   timestamp: Date;
   duration: number;
-  requestId?: string; // For async tool correlation (extension results)
+  requestId?: string;
   status?: 'pending' | 'completed' | 'failed';
 }
 
@@ -192,20 +111,6 @@ export interface ExplorationError {
   tool: ExplorationAction;
   error: string;
   timestamp: Date;
-}
-
-/**
- * Final exploration result
- */
-export interface ExplorationResult {
-  success: boolean;
-  taskId: string;
-  status: 'complete' | 'failed' | 'max_iterations';
-  config?: FetchConfig;
-  iterations: number;
-  discoveries: Discovery[];
-  confidence: number;
-  reason?: string;
 }
 
 /**
@@ -260,4 +165,128 @@ export interface ToolOutput {
   totalCallsCaptured?: number;
   duration?: number;
   timestamp: string;
+}
+
+// ============================================
+// Domain-organized State (LangGraph-compatible)
+// ============================================
+
+/**
+ * Task identity — who and what we're exploring
+ */
+export interface TaskInfo {
+  taskId: string;
+  companyId: string;
+  company: {
+    id: string;
+    name: string;
+    website?: string;
+    industry?: string;
+  };
+  contentTypes: ContentType[];
+}
+
+/**
+ * Iteration control — loop state
+ */
+export interface IterationControl {
+  iteration: number;
+  maxIterations: number;
+  shouldContinue: boolean;
+  terminationReason?: 'generate_config' | 'fail' | 'max_iterations';
+}
+
+/**
+ * Collective memory — discoveries across all iterations
+ */
+export interface ExplorationMemory {
+  pagesVisited: PageVisit[];
+  discoveries: Discovery[];
+  errors: ExplorationError[];
+}
+
+/**
+ * LLM decision output
+ */
+export interface LLMDecision {
+  action: ExplorationAction;
+  target?: {
+    url?: string;
+    selectors?: Record<string, string>;
+    script?: string;
+    args?: Record<string, unknown>;
+    monitoringId?: string;
+    filter?: NetworkFilter;
+  };
+  reasoning: string;
+  confidence: number;
+  reflectionPrompt?: string;
+}
+
+/**
+ * Per-iteration snapshot — ALL activity for ONE iteration together
+ */
+export interface IterationSnapshot {
+  stepNumber: number;
+  thought: string;
+  decision: LLMDecision;
+  toolCall?: ToolCall;
+  networkCalls: NetworkCall[];
+  observation?: string;
+  reflectionNotes?: string;
+  timestamp: Date;
+}
+
+/**
+ * Iteration history — all snapshots in order
+ */
+export interface IterationHistory {
+  snapshots: IterationSnapshot[];
+  waitingForExtensionResult?: boolean;
+}
+
+/**
+ * Agent context — current state
+ */
+export interface AgentContext {
+  currentUrl?: string;
+  pendingMonitoringId?: string;
+}
+
+/**
+ * Final result data
+ */
+export interface ExplorationResultData {
+  success: boolean;
+  taskId: string;
+  status: 'complete' | 'failed' | 'max_iterations';
+  config?: FetchConfig;
+  confidence: number;
+  reason?: string;
+}
+
+/**
+ * Exploration state for LangGraph — all domain data organized
+ */
+export interface ExplorationState {
+  // Identity
+  task: TaskInfo;
+
+  // Loop control
+  iteration: IterationControl;
+
+  // Collective memory across iterations
+  memory: ExplorationMemory;
+
+  // Per-iteration breakdown (one snapshot = one iteration)
+  history: IterationHistory;
+
+  // Current context
+  context: AgentContext;
+
+  // Final output
+  result?: ExplorationResultData;
+
+  // Metadata
+  startTime: Date;
 }

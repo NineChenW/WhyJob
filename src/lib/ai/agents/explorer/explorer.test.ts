@@ -8,9 +8,9 @@
  * 3. A real company website to explore
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { ExplorationState } from './types';
-import { createExplorerGraph, initializeExplorationState } from './graph';
+import { describe, it, expect } from 'vitest';
+import { initializeExplorationState } from './graph';
+import { ExplorationStateWrapper } from './domain';
 import { groqDecisionSchema, parseDecisionResponse } from './prompts/schemas';
 
 // Test companies with known careers pages
@@ -35,13 +35,15 @@ describe('Explorer Agent Integration', { timeout: 60000 }, () => {
         maxIterations: 3,
       });
 
-      expect(state.taskId).toBe('test-stripe-001');
-      expect(state.company.name).toBe('Stripe');
-      expect(state.iteration).toBe(0);
-      expect(state.maxIterations).toBe(3);
-      expect(state.pagesVisited).toEqual([]);
-      expect(state.discoveries).toEqual([]);
-      expect(state.shouldContinue).toBe(true);
+      const wrapper = new ExplorationStateWrapper(state);
+
+      expect(wrapper.task.taskId).toBe('test-stripe-001');
+      expect(wrapper.task.company.name).toBe('Stripe');
+      expect(wrapper.iteration.iteration).toBe(0);
+      expect(wrapper.iteration.maxIterations).toBe(3);
+      expect(wrapper.memory.pagesVisited).toEqual([]);
+      expect(wrapper.memory.discoveries).toEqual([]);
+      expect(wrapper.iteration.shouldContinue).toBe(true);
     });
 
     it('should use default max iterations', () => {
@@ -52,7 +54,8 @@ describe('Explorer Agent Integration', { timeout: 60000 }, () => {
         contentTypes: ['job_listing'],
       });
 
-      expect(state.maxIterations).toBe(5);
+      const wrapper = new ExplorationStateWrapper(state);
+      expect(wrapper.iteration.maxIterations).toBe(5);
     });
   });
 
@@ -148,7 +151,7 @@ describe('Explorer Agent Integration', { timeout: 60000 }, () => {
   describe('ReAct loop simulation', () => {
     it('should simulate first iteration decision', () => {
       // Simulate initial state
-      const state: ExplorationState = initializeExplorationState({
+      const state = initializeExplorationState({
         taskId: 'test-sim-001',
         companyId: 'company-sim-001',
         company: {
@@ -161,12 +164,14 @@ describe('Explorer Agent Integration', { timeout: 60000 }, () => {
         maxIterations: 3,
       });
 
-      expect(state.iteration).toBe(0);
-      expect(state.pagesVisited.length).toBe(0);
-      expect(state.shouldContinue).toBe(true);
+      const wrapper = new ExplorationStateWrapper(state);
+
+      expect(wrapper.iteration.iteration).toBe(0);
+      expect(wrapper.memory.pagesVisited.length).toBe(0);
+      expect(wrapper.iteration.shouldContinue).toBe(true);
 
       // Expected first action should be NAVIGATE
-      const expectedFirstAction = state.pagesVisited.length === 0 ? 'NAVIGATE' : null;
+      const expectedFirstAction = wrapper.memory.pagesVisited.length === 0 ? 'NAVIGATE' : null;
       expect(expectedFirstAction).toBe('NAVIGATE');
     });
 
@@ -179,32 +184,19 @@ describe('Explorer Agent Integration', { timeout: 60000 }, () => {
         maxIterations: 3,
       });
 
-      // Simulate iteration 0
-      expect(state.iteration).toBe(0);
+      let wrapper = new ExplorationStateWrapper(state);
 
-      // Simulate iteration increment (this is how LangGraph handles it)
-      state = { ...state, iteration: state.iteration + 1 };
-      expect(state.iteration).toBe(1);
+      // Simulate iteration 0
+      expect(wrapper.iteration.iteration).toBe(0);
+
+      // Simulate iteration increment
+      wrapper.advanceIteration();
+      expect(wrapper.iteration.iteration).toBe(1);
 
       // After navigation, expect GET_SNAPSHOT
-      const afterNavState = {
-        ...state,
-        pagesVisited: [{ url: 'https://stripe.com', title: 'Stripe', timestamp: new Date() }],
-      };
-      const expectedAction = afterNavState.pagesVisited.length > 0 ? 'GET_SNAPSHOT' : 'NAVIGATE';
+      wrapper.navigateTo('https://stripe.com', 'Stripe');
+      const expectedAction = wrapper.memory.pagesVisited.length > 0 ? 'GET_SNAPSHOT' : 'NAVIGATE';
       expect(expectedAction).toBe('GET_SNAPSHOT');
-    });
-  });
-
-  describe('createExplorerGraph', () => {
-    it.skip('should create a valid graph structure', () => {
-      // Note: This test requires full LangGraph initialization which has issues
-      // with the current API. This is a known limitation and requires proper
-      // integration testing setup with the Chrome Extension running.
-      const graph = createExplorerGraph();
-      expect(graph).toBeDefined();
-      // Graph should be a StateGraph instance
-      expect(typeof graph.compile).toBe('function');
     });
   });
 });

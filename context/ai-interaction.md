@@ -15,7 +15,7 @@ This is the common workflow that we will use for every single feature/fix:
 
 1. **Document** - Document the feature in @context/current-feature.md.
 2. **Branch** - Create new branch for feature, fix, etc
-3. **Analyze** - Analyzing the current feature in the file, scan the related code and documents, or ask questions, until there is no ambiguity, fuzziness, or problems.
+3. **Analyze** - Analyzing the current feature in the file, scan the related code and documents, or ask questions, until there is no ambiguity, fuzziness, or problems. !!! Search related official document for reference anytime you need.!!!
 4. **Implement** - Implement the feature/fix that I create in @context/current-feature.md
 5. **Test** - Verify it works in the browser. Add/update Vitest unit tests for any new server actions or utility/library code (`*.test.ts` co-located next to source). Run `npm run test:run` and `npm run build` and fix any failures.
 6. **Iterate** - Iterate and change things if needed

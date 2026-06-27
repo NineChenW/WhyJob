@@ -1,13 +1,23 @@
 // src/lib/ai/agents/explorer/fetchconfig-generator.ts
 
+/**
+ * Generate FetchConfig from exploration state
+ */
+
 import type { ExplorationState, FetchConfig, Discovery, NetworkCall, ContentType } from './types';
+import { ExplorationStateWrapper } from './domain';
 import { DEFAULT_SELECTORS } from './constants';
 
 /**
  * Generate FetchConfig from exploration state
  */
 export function buildFetchConfig(state: ExplorationState): FetchConfig | null {
-  const { taskId, company, contentTypes, discoveries, networkCalls, pagesVisited } = state;
+  const wrapper = new ExplorationStateWrapper(state);
+
+  const task = wrapper.task;
+  const discoveries = wrapper.memory.discoveries;
+  const networkCalls = wrapper.history.allNetworkCalls;
+  const pagesVisited = wrapper.memory.pagesVisited;
 
   // Find best discovery
   const apiDiscovery = discoveries.find((d) => d.type === 'api_endpoint');
@@ -20,19 +30,19 @@ export function buildFetchConfig(state: ExplorationState): FetchConfig | null {
     return null;
   }
 
-  const primaryType = contentTypes[0] || 'job_listing';
+  const primaryType = task.contentTypes[0] || 'job_listing';
 
   // Prefer API if found
   if (apiDiscovery) {
-    return buildApiConfig(apiDiscovery, primaryType, company.id, company.name, networkCalls);
+    return buildApiConfig(apiDiscovery, primaryType, task.companyId, task.companyName, networkCalls);
   }
 
   // Fall back to web scraping
   return buildWebConfig(
     webDiscovery!,
     primaryType,
-    company.id,
-    company.name,
+    task.companyId,
+    task.companyName,
     pagesVisited[0]?.url
   );
 }

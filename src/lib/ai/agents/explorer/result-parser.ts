@@ -30,6 +30,14 @@ export function parseToolResult(
     };
   }
 
+  if (output === undefined || output === null) {
+    return {
+      observation: `No output received for ${action}`,
+      discoveries: [],
+      networkCalls: [],
+    };
+  }
+
   const result = output as Record<string, unknown>;
 
   switch (action) {
@@ -206,14 +214,32 @@ function parseExtractResult(result: Record<string, unknown>): ToolParseResult {
   };
 }
 
-function parseNavigateResult(result: Record<string, unknown>): ToolParseResult {
+function parseNavigateResult(result: Record<string, unknown> | undefined): ToolParseResult {
+  // Handle undefined result
+  if (!result) {
+    return {
+      observation: 'Navigation result not available',
+      discoveries: [],
+      networkCalls: [],
+      currentUrl: undefined,
+    };
+  }
+
+  // Handle both success (with data nested) and error (flat) structures from extension
+  // Success: { requestId, success: true, data: { success, url, title } }
+  // Error: { requestId, success: false, error: '...' }
+  const data = result.data as Record<string, unknown> | undefined;
+  const success = (data?.success ?? result.success) as boolean;
+  const url = (data?.url ?? result.url) as string | undefined;
+  const error = (data?.error ?? result.error) as string | undefined;
+
   return {
-    observation: result.success
-      ? `Navigated to ${result.url}`
-      : `Navigation failed: ${result.error}`,
+    observation: success
+      ? `Navigated to ${url}`
+      : `Navigation failed: ${error}`,
     discoveries: [],
     networkCalls: [],
-    currentUrl: result.url as string,
+    currentUrl: url,
   };
 }
 

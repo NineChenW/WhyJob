@@ -1,86 +1,54 @@
 /**
- * Manual test script for Explorer Agent
+ * Manual test script for Explorer Agent (LangGraph-based)
  *
- * Usage:
- *   1. Start the test server: cd explorer-extension && node test-server.mjs
- *   2. Run this script: npx tsx scripts/test-explorer.ts
+ * This script tests the new LangGraph-based explorer with checkpointer.
+ * The exploration flow now uses:
+ * 1. createExplorerGraph() - builds the state graph
+ * 2. runExplorerGraph() - runs with PostgresSaver checkpointer
+ * 3. interrupt()/Command({ resume }) - handles async tool execution
  *
- * Or point to the Next.js dev server:
- *   npx tsx scripts/test-explorer.ts http://localhost:3000
+ * For full end-to-end testing:
+ * 1. Start dev server: npm run dev
+ * 2. Start extension test server: cd explorer-extension && node test-server.mjs
+ * 3. Submit a task via the API and watch logs
+ *
+ * Note: The old HttpExtension-based explore() function has been replaced.
+ * Use POST /api/explorer/tasks/pickup to pick up tasks.
  */
 
-import { explore, HttpExtension, type ExplorationTask } from '../src/lib/ai';
+import { createExplorerGraph, getCheckpointer, ChromeExtensionTool } from '../src/lib/ai';
 
-const serverUrl = process.argv[2] || 'http://localhost:3001';
+const SERVER_URL = process.argv[2] || 'http://localhost:3001';
 
 async function main() {
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║   Explorer Agent Test                                    ║
-║   Server: ${serverUrl.padEnd(41)}║
+║   Explorer Agent Test (LangGraph)                         ║
+║   Server: ${SERVER_URL.padEnd(41)}║
 ╚══════════════════════════════════════════════════════════╝
 `);
 
-  // Create HTTP extension
-  const extension = new HttpExtension(serverUrl);
-  console.log('[Test] Connecting to server...');
+  console.log('[Test] Checking LangGraph checkpointer setup...');
 
   try {
-    await extension.connect();
-    console.log('[Test] Connected to server\n');
+    const checkpointer = await getCheckpointer();
+    console.log('[Test] Checkpointer ready:', !!checkpointer);
+
+    const graph = createExplorerGraph();
+    console.log('[Test] Graph created:', !!graph);
+
+    // Test tool creation
+    const tool = new ChromeExtensionTool(SERVER_URL, 'test-task');
+    console.log('[Test] ChromeExtensionTool created:', !!tool);
+
+    console.log('\n✅ All components initialized successfully');
+    console.log('\nNote: Full exploration requires:');
+    console.log('  1. Start extension test server: cd explorer-extension && node test-server.mjs');
+    console.log('  2. Use POST /api/explorer/tasks/pickup to pick up a task');
+    console.log('  3. Extension will poll /api/agent/commands and POST results to /api/agent/results\n');
   } catch (error) {
-    console.error('[Test] Failed to connect:', error);
-    console.log('\nMake sure the test server is running:');
-    console.log('  cd explorer-extension && node test-server.mjs\n');
+    console.error('\n❌ Error:', error);
     process.exit(1);
-  }
-
-  // Test task
-  const task: ExplorationTask = {
-    companyId: 'test-stripe',
-    company: {
-      name: 'Stripe',
-      website: 'https://stripe.com',
-      industry: 'fintech',
-    },
-    contentTypes: ['jobs'],
-  };
-
-  console.log('[Test] Starting exploration for:', task.company.name);
-  console.log('[Test] Target:', task.contentTypes.join(', '));
-  console.log('[Test] Max iterations:', 5);
-  console.log('');
-
-  try {
-    const result = await explore(task, extension);
-
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('RESULT:');
-    console.log('═══════════════════════════════════════════════════════');
-
-    if (result.success && result.config) {
-      console.log('\n✅ SUCCESS');
-      console.log('\nFetchConfig:');
-      console.log('  Name:', result.config.name);
-      console.log('  URL:', result.config.url);
-      console.log('  Method:', result.config.method);
-      console.log('  ParseWith:', result.config.parseWith);
-      console.log('  AuthRequired:', result.config.authRequired);
-      console.log('  Confidence:', result.config.confidence);
-      if (result.config.selectors) {
-        console.log('  Selectors:', JSON.stringify(result.config.selectors, null, 2));
-      }
-      if (result.config.pagination) {
-        console.log('  Pagination:', JSON.stringify(result.config.pagination));
-      }
-    } else {
-      console.log('\n❌ FAILED:', result.reason);
-    }
-  } catch (error) {
-    console.error('\n❌ ERROR:', error);
-  } finally {
-    extension.disconnect();
-    console.log('\n[Test] Disconnected');
   }
 }
 

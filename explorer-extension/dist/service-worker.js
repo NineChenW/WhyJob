@@ -4,7 +4,7 @@ var DEFAULT_CONFIG = {
   pollIntervalMs: 2e3,
   connectionTimeoutMs: 1e4
 };
-var NAVIGATION_TIMEOUT_MS = 1e4;
+var NAVIGATION_TIMEOUT_MS = 2e4;
 var JS_EXECUTION_TIMEOUT_MS = 5e3;
 var MAX_NETWORK_CALLS_STORED = 500;
 
@@ -16,7 +16,9 @@ var lastPollTime = 0;
 var currentTaskId = null;
 var currentTaskWindowId = null;
 var pendingCommandId = null;
-var pollInterval = null;
+var isProcessingCycle = false;
+var MAX_RECENTLY_EXECUTED = 10;
+var recentlyExecutedIds = [];
 var networkMonitorStore = {};
 var activeMonitoringId = null;
 var capturedCalls = [];
@@ -147,10 +149,25 @@ async function startPolling() {
   isPolling = true;
   console.log("[Explorer Extension] Starting poll loop");
   await attemptPickup();
-  pollInterval = setInterval(pollLoop, config.pollIntervalMs);
+  pollLoopRecursive();
+}
+var pollLoopRunning = false;
+async function pollLoopRecursive() {
+  if (!isPolling || pollLoopRunning) return;
+  pollLoopRunning = true;
+  try {
+    await pollLoopIteration();
+  } catch (error) {
+    console.error("[Explorer Extension] Poll loop error:", error);
+  } finally {
+    pollLoopRunning = false;
+  }
+  if (isPolling) {
+    setTimeout(pollLoopRecursive, config.pollIntervalMs);
+  }
 }
 async function attemptPickup() {
-  if (currentTaskId && pendingCommandId) {
+  if (currentTaskId && (pendingCommandId || isProcessingCycle)) {
     return true;
   }
   await closeTaskWindow();
@@ -168,12 +185,18 @@ async function attemptPickup() {
   }
   return false;
 }
-async function pollLoop() {
+async function pollLoopIteration() {
   if (!isPolling) return;
-  if (pendingCommandId) {
+  if (isProcessingCycle) {
+    console.log("[Explorer Extension] Skipping poll - already processing previous cycle");
     return;
   }
+  if (pendingCommandId) {
+    console.log("[Explorer Extension] Resetting stuck pendingCommandId:", pendingCommandId);
+    pendingCommandId = null;
+  }
   try {
+    isProcessingCycle = true;
     if (!currentTaskId) {
       const pickupResult = await pickupTask();
       if (pickupResult?.pickedUp && pickupResult.task) {
@@ -189,19 +212,31 @@ async function pollLoop() {
         return;
       }
     }
-    const commands = await pollCommands();
+    const allCommands = await pollCommands();
+    const commands = allCommands.filter((cmd) => {
+      if (recentlyExecutedIds.includes(cmd.requestId)) {
+        console.log(`[Explorer Extension] Ignoring duplicate command: ${cmd.type} (${cmd.requestId})`);
+        return false;
+      }
+      return true;
+    });
     if (commands.length === 0) {
-      pendingCommandId = null;
       return;
     }
-    pendingCommandId = commands[0].requestId;
-    console.log(`[Explorer Extension] Executing: ${commands[0].type} (${commands[0].requestId})`);
-    const results = await executeCommands(commands);
+    const cmdToExecute = commands[0];
+    pendingCommandId = cmdToExecute.requestId;
+    console.log(`[Explorer Extension] Executing: ${cmdToExecute.type} (${cmdToExecute.requestId})`);
+    const results = await executeCommands([cmdToExecute]);
     await postResults(results);
-    pendingCommandId = null;
+    recentlyExecutedIds.push(cmdToExecute.requestId);
+    if (recentlyExecutedIds.length > MAX_RECENTLY_EXECUTED) {
+      recentlyExecutedIds.shift();
+    }
   } catch (error) {
-    console.error("[Explorer Extension] Poll loop error:", error);
+    console.error("[Explorer Extension] Poll iteration error:", error);
+  } finally {
     pendingCommandId = null;
+    isProcessingCycle = false;
   }
 }
 async function executeCommands(commands) {

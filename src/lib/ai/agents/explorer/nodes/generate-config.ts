@@ -1,55 +1,46 @@
 // src/lib/ai/agents/explorer/nodes/generate-config.ts
 
-import { buildFetchConfig } from '../fetchconfig-generator';
-import type { ExplorationState } from '../types';
-
 /**
  * Generate Config Node
  *
  * Creates FetchConfig from accumulated discoveries.
  * This is the terminal node on successful completion.
  */
-export async function generateConfigNode(state: ExplorationState): Promise<Partial<ExplorationState>> {
-  const config = buildFetchConfig(state);
 
+import { ExplorationStateWrapper } from '../domain';
+import { createNode } from '../node-wrapper';
+import { TERMINATION_REASON } from '../constants';
+import { buildFetchConfig } from '../fetchconfig-generator';
+
+/**
+ * Generate Config Node
+ *
+ * Builds FetchConfig from accumulated discoveries and sets the final result.
+ */
+export const generateConfigNode = createNode(async (wrapper: ExplorationStateWrapper) => {
+  const config = buildFetchConfig(wrapper.raw);
   const success = !!config;
+
   const status = !success
     ? 'failed'
-    : state.terminationReason === 'max_iterations'
+    : wrapper.iteration.terminationReason === TERMINATION_REASON.MAX_ITERATIONS
       ? 'max_iterations'
       : 'complete';
 
-  return {
-    finalResult: {
-      success,
-      taskId: state.taskId,
-      status,
-      config: config ?? undefined,
-      iterations: state.iteration,
-      discoveries: state.discoveries,
-      confidence: config?.confidence ?? calculateOverallConfidence(state.discoveries),
-      reason: !success
-        ? 'No valid discoveries found to generate config'
-        : state.terminationReason === 'max_iterations'
-          ? `Max iterations (${state.maxIterations}) reached`
-          : undefined,
-    },
-    shouldContinue: false,
-  };
-}
+  wrapper.setResult({
+    success,
+    taskId: wrapper.task.taskId,
+    status,
+    config: config ?? undefined,
+    confidence: config?.confidence ?? wrapper.memory.calculateConfidence(),
+    reason: !success
+      ? 'No valid discoveries found to generate config'
+      : wrapper.iteration.terminationReason === TERMINATION_REASON.MAX_ITERATIONS
+        ? `Max iterations (${wrapper.iteration.maxIterations}) reached`
+        : undefined,
+  });
 
-function calculateOverallConfidence(discoveries: ExplorationState['discoveries']): number {
-  if (discoveries.length === 0) return 0;
+  wrapper.terminate(TERMINATION_REASON.GENERATE_CONFIG);
 
-  const avgConfidence = discoveries.reduce((sum, d) => sum + d.confidence, 0) / discoveries.length;
-
-  // Boost for API endpoints
-  const hasApi = discoveries.some((d) => d.type === 'api_endpoint');
-  const boost = hasApi ? 15 : 0;
-
-  // Reduce for errors
-  const errorCount = discoveries.filter((d) => d.type === 'no_content' || !d.confidence).length;
-  const penalty = errorCount * 5;
-
-  return Math.max(0, Math.min(100, avgConfidence + boost - penalty));
-}
+  return wrapper;
+});

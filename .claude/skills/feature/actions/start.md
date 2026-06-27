@@ -1,5 +1,7 @@
 # Start Action
 
+!!!Do not reset the current-feature.md after finish implemented this feature!!!
+
 1. Read current-feature.md - verify Goals are populated
 2. If empty, error: "Run /feature load first"
 3. Set Status to "In Progress"
