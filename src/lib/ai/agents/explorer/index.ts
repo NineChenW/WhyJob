@@ -6,12 +6,12 @@ export * from './types';
 // Constants
 export { EXPLORER_CONSTANTS, TERMINAL_ACTIONS, DEFAULT_SELECTORS } from './constants';
 
-// Prompts
-export * from './prompts';
+// Prompts (moved into nodes/llm-decision/)
 
 // Nodes
 export {
   llmDecisionNode,
+  callLlmForDecision,
   checkTerminationNode,
   executeToolNode,
   observeResultNode,

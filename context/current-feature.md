@@ -13,34 +13,24 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Test Agent 01 - init LLM node
-
 # Current Feature
 
 ## Status
 
-In Progress
+Not Start
 
 ## Goals
 
-- [ ] Create basic LangGraph agent structure with object-oriented design
-- [ ] Implement LLM node using NVIDIA AI provider
-- [ ] Set up test infrastructure for the agent
-- [ ] Verify build passes and tests pass
+
 
 ## Notes
 
-- Use NVIDIA AI as the LLM provider (nvidia embeddings / chat models)
-- Object-oriented approach for the agent structure
-- Reference LangGraph official documentation
 
-## References
-
-- Spec: `context/features/test-agent-01-init-llm-spec.md`
-- LangGraph Docs: https://langchain-ai.github.io/langgraph/
 
 ## History
 
+- **2026-06-29**: Explorer Extension Protocol Alignment (Iteration 13) - Updated commands/results APIs to use proper PollResponse/ResultPayload types from explorer-extension. Created shared types in src/lib/http/explorer-types.ts. Test page now properly tests extension polling pattern. Build passes, 96 tests pass.
+- **2026-06-29**: Explorer Extension Refactor - Refactored service-worker.ts to meet code quality standards: each method shows clear process steps, each step with sub-methods or ≤3 lines. Added command handler map, navigation helpers, network filter helpers, content script caller, and polling loop helpers. Build passes, tests pass.
 - **2026-06-22**: Explorer Agent - Checkpointer + Interrupt (Iteration 12) - Add PostgresSaver checkpointer, use interrupt() for async pause/resume, remove all AgentStateLog dependencies. Build passes, tests pass.
 - **2026-06-19**: Explorer Agent - LangGraph Wiring (Iteration 11) - runExplorerGraph resume mode, pickup/process endpoints wired to LangGraph, Commands GET returns queued commands. Build passes, 149 tests pass.
 - **2026-06-18**: Explorer Agent - AI Agent Integration (Iteration 10) - AgentStateLog model, state-log.ts, async execute_tool with hang/resume, test_config node, Results API resume trigger. Build passes, 149 tests pass.

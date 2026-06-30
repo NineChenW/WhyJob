@@ -1,4 +1,5 @@
 // Shared types for Explorer Agent Chrome Extension
+// These types mirror the explorer-extension/types.ts for use in the main app
 
 // ============================================
 // HTTP Polling Protocol Types
@@ -155,40 +156,3 @@ export interface StopNetworkMonitoringResult {
   totalCallsCaptured: number;
   duration: number;
 }
-
-// ============================================
-// Network Monitoring State
-// ============================================
-
-export interface NetworkCallStore {
-  [monitoringId: string]: {
-    calls: CapturedNetworkCall[];
-    startTime: number;
-  };
-}
-
-// ============================================
-// Configuration
-// ============================================
-
-export interface PollingConfig {
-  serverUrl: string;
-  pollIntervalMs: number;
-  connectionTimeoutMs: number;
-}
-
-export const DEFAULT_CONFIG: PollingConfig = {
-  serverUrl: 'http://localhost:3000/api/agent',
-  pollIntervalMs: 2000,
-  connectionTimeoutMs: 10000,
-};
-
-// Constants
-export const NAVIGATION_TIMEOUT_MS = 20000;
-export const NETWORK_IDLE_TIMEOUT_MS = 5000;
-export const MAX_VISIBLE_TEXT_LENGTH = 5000;
-export const MAX_ELEMENT_TEXT_LENGTH = 200;
-export const MAX_RETRIES = 3;
-export const RETRY_DELAY_MS = 1000;
-export const JS_EXECUTION_TIMEOUT_MS = 5000;
-export const MAX_NETWORK_CALLS_STORED = 500;

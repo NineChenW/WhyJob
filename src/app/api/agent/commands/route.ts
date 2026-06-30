@@ -1,110 +1,96 @@
 /**
  * Explorer Agent Commands API
  *
- * GET /api/agent/commands?extensionId=xxx&taskId=yyy
+ * GET /api/agent/commands?taskId=xxx
  *
- * Returns pending command from LangGraph checkpointed state (via PostgresSaver).
- * The extension polls this to get the next command to execute.
+ * Returns commands for the extension to execute via polling.
  *
  * Flow:
- * 1. runExplorerGraph() hits interrupt() → graph pauses, state checkpointed
- * 2. Extension polls Commands GET → reads pending tool from graph state
- * 3. Extension executes command → POSTs /results
- * 4. Results API resumes graph with Command({ resume })
+ * 1. Extension polls Commands GET → returns pending commands
+ * 2. Extension executes command → POSTs /results
+ * 3. Results API processes result (idempotency via queue)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCheckpointer, createThreadConfig } from '@/lib/ai/agents/explorer/checkpointer';
-import { createExplorerGraph } from '@/lib/ai/agents/explorer/graph';
-import { prisma } from '@/lib/prisma';
+import {
+  popNextPendingCommand,
+  hasMorePendingCommands,
+} from '@/lib/http/explorer-queue';
+import type {
+  PollResponse,
+  Command,
+  NavigateParams,
+  ExtractDomParams,
+  ExecuteJsParams,
+  GetNetworkLogParams,
+  StopNetworkMonitoringParams,
+} from '@/lib/http/explorer-types';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Get task status based on command queue
+ */
+function getTaskStatus(taskId: string): 'exploring' | 'complete' | 'failed' {
+  return hasMorePendingCommands(taskId) ? 'exploring' : 'complete';
+}
 
 export async function GET(request: NextRequest) {
   const timestamp = new Date().toISOString();
   const searchParams = request.nextUrl.searchParams;
-  const extensionId = searchParams.get('extensionId');
   const taskId = searchParams.get('taskId');
 
-  console.log(`[${timestamp}] [Commands] Received request - extensionId: ${extensionId}, taskId: ${taskId}`);
-
-  if (!extensionId) {
-    console.log(`[${timestamp}] [Commands] Missing extensionId`);
-    return NextResponse.json(
-      { error: 'extensionId required' },
-      { status: 400 }
-    );
-  }
+  console.log(`[${timestamp}] [Commands] Poll request - taskId: ${taskId}`);
 
   if (!taskId) {
     console.log(`[${timestamp}] [Commands] Missing taskId`);
-    return NextResponse.json({
+    // Return empty response - no task specified
+    const response: PollResponse = {
       commands: [],
-      serverUrl: '',
-      message: 'taskId required',
-    });
+      serverUrl: `${request.nextUrl.origin}/api/agent`,
+      taskStatus: undefined,
+      taskId: undefined,
+    };
+    return NextResponse.json(response);
   }
 
   try {
-    // Read pending tool from graph state (checkpointed in Postgres via PostgresSaver)
-    const checkpointer = await getCheckpointer();
-    const graph = createExplorerGraph();
-    const compiled = graph.compile({ checkpointer });
-    const config = createThreadConfig(taskId);
+    // Get next pending command
+    const command = popNextPendingCommand(taskId);
 
-    const state = await compiled.getState(config);
-
-    // Find pending tool call from checkpointed state
-    const toolCalls = state.values.toolCalls as Array<{
-      type: string;
-      input: Record<string, unknown>;
-      requestId?: string;
-      status?: string;
-    }> | undefined;
-
-    const lastCall = toolCalls?.[toolCalls.length - 1];
-
-    if (lastCall?.status === 'pending') {
-      console.log(`[${timestamp}] [Commands] Returning pending command: ${lastCall.type}`);
-
-      return NextResponse.json({
-        commands: [{
-          type: lastCall.type as 'NAVIGATE' | 'GET_SNAPSHOT' | 'EXTRACT_DOM' | 'EXECUTE_JS' | 'START_NETWORK_MONITORING' | 'GET_NETWORK_LOG' | 'STOP_NETWORK_MONITORING',
-          requestId: lastCall.requestId,
-          params: lastCall.input,
-        }],
-        taskStatus: 'exploring',
-        iteration: state.values.iteration,
-      });
-    }
-
-    // No pending tool - check if task is complete or still running
-    const task = await prisma.fetchTask.findUnique({
-      where: { id: taskId },
-    });
-
-    // Graph has more steps to run but no pending tool means it's either:
-    // - Still running (no interrupt yet)
-    // - Completed (state.next is empty)
-    if (!state.next || state.next.length === 0) {
-      console.log(`[${timestamp}] [Commands] Graph completed for task ${taskId}`);
-      return NextResponse.json({
+    if (!command) {
+      console.log(`[${timestamp}] [Commands] No pending commands for task: ${taskId}`);
+      const response: PollResponse = {
         commands: [],
-        taskStatus: task?.status ?? 'complete',
-        message: 'Graph completed',
-      });
+        serverUrl: `${request.nextUrl.origin}/api/agent`,
+        taskStatus: getTaskStatus(taskId),
+        taskId,
+      };
+      return NextResponse.json(response);
     }
 
-    // Still running but no command queued yet
-    console.log(`[${timestamp}] [Commands] No pending command yet - graph still running`);
-    return NextResponse.json({
-      commands: [],
-      taskStatus: task?.status ?? 'exploring',
-      iteration: state.values.iteration,
-      message: 'No command queued yet - poll again',
+    // Build command object
+    const cmd: Command = {
+      type: command.type,
+      requestId: command.requestId,
+      params: command.params as NavigateParams | ExtractDomParams | ExecuteJsParams | GetNetworkLogParams | StopNetworkMonitoringParams | undefined,
+    };
+
+    console.log(`[${timestamp}] [Commands] Returning command:`, {
+      requestId: command.requestId,
+      type: command.type,
     });
+
+    const response2: PollResponse = {
+      commands: [cmd],
+      serverUrl: `${request.nextUrl.origin}/api/agent`,
+      taskStatus: getTaskStatus(taskId),
+      taskId,
+    };
+
+    return NextResponse.json(response2);
   } catch (error) {
-    console.error(`[${timestamp}] [Commands] Error getting command:`, error);
+    console.error(`[${timestamp}] [Commands] Error:`, error);
     return NextResponse.json(
       { error: 'Failed to get command', details: error instanceof Error ? error.message : 'Unknown' },
       { status: 500 }

@@ -4,8 +4,8 @@
  * Build context prompt from current exploration state
  */
 
-import type { ExplorationState, PageVisit, Discovery, NetworkCall, ExplorationError } from '../types';
-import { ExplorationStateWrapper } from '../domain';
+import type { ExplorationState, PageVisit, Discovery, NetworkCall, ExplorationError } from '../../../types';
+import { ExplorationStateWrapper } from '../../../domain';
 
 /**
  * Build context prompt from current exploration state
@@ -133,7 +133,7 @@ function formatErrors(errors: ExplorationError[]): string {
     .join('\n');
 }
 
-function formatReActTrace(snapshots: import('../types').IterationSnapshot[]): string {
+function formatReActTrace(snapshots: import('../../../types').IterationSnapshot[]): string {
   if (snapshots.length === 0) return '  (Fresh start - no reasoning yet)';
 
   return snapshots

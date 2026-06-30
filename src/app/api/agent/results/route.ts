@@ -1,40 +1,35 @@
 /**
  * Explorer Agent Results API
  *
- * POST /api/agent/results → Extension posts result, triggers graph resume
+ * POST /api/agent/results → Extension posts result
  *
- * Resume flow (PostgresSaver checkpointer):
- * 1. Extension POSTs result → Results API calls graph.invoke(Command({ resume }))
- * 2. LangGraph loads checkpoint by thread_id, interrupt() returns resume value
- * 3. execute_tool node completes pending call, graph continues
+ * Queue-only: Manages result idempotency without database.
+ * Same result can only be posted once.
+ *
+ * Flow:
+ * 1. Extension POSTs result → Results API marks result as processed
+ * 2. Results API logs the result data for debugging/analysis
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Command } from '@langchain/langgraph';
-import { completeFetchTask, failFetchTask } from '@/lib/db/explorer';
-import { getCheckpointer, createThreadConfig } from '@/lib/ai/agents/explorer/checkpointer';
-import { createExplorerGraph } from '@/lib/ai/agents/explorer/graph';
-
-interface ResultPayload {
-  extensionId: string;
-  results: Array<{
-    requestId: string;
-    success: boolean;
-    data?: unknown;
-    error?: string;
-  }>;
-}
+import {
+  isResultProcessed,
+  markResultProcessed,
+  getResultProcessingInfo,
+  extractTaskIdFromRequestId,
+} from '@/lib/http/explorer-queue';
+import type { ResultPayload } from '@/lib/http/explorer-types';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/agent/results
- * Not used in checkpointer flow - kept for potential debugging.
+ * Debug endpoint to check result status.
  */
 export async function GET(request: NextRequest) {
   const taskId = request.nextUrl.searchParams.get('taskId');
   return NextResponse.json({
-    message: 'Use POST to resume graph',
+    message: 'Use POST to post results',
     taskId,
     timestamp: new Date().toISOString(),
   });
@@ -43,7 +38,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/agent/results
  * Receives tool execution results from Chrome Extension.
- * Resumes the LangGraph with Command({ resume }) to continue the ReAct loop.
+ * Same result can only be posted once (idempotency via queue).
  */
 export async function POST(request: NextRequest) {
   const timestamp = new Date().toISOString();
@@ -51,14 +46,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: ResultPayload = await request.json();
-    const { results, extensionId } = body;
+    const { results, taskId: bodyTaskId } = body;
 
-    console.log(`[${timestamp}] [Results] extensionId: ${extensionId}, results count: ${results?.length}`);
+    console.log(`[${timestamp}] [Results] taskId: ${bodyTaskId}, results count: ${results?.length}`);
 
     if (!results || !Array.isArray(results) || results.length === 0) {
       console.log(`[${timestamp}] [Results] No results to process`);
       return NextResponse.json({ error: 'results required' }, { status: 400 });
     }
+
+    const processedResults: Array<{
+      requestId: string;
+      success: boolean;
+      alreadyProcessed: boolean;
+      processedAt?: string;
+      taskId?: string;
+    }> = [];
 
     // Process each result
     for (const result of results) {
@@ -68,89 +71,64 @@ export async function POST(request: NextRequest) {
         error: result.error,
       });
 
-      // Extract taskId from requestId (format: "taskId-iteration-timestamp")
-      const requestIdParts = result.requestId.split('-');
-      if (requestIdParts.length < 2) {
+      // Extract taskId from requestId
+      let taskId: string;
+      try {
+        taskId = extractTaskIdFromRequestId(result.requestId);
+      } catch {
         console.log(`[${timestamp}] [Results] Invalid requestId format: ${result.requestId}`);
+        processedResults.push({
+          requestId: result.requestId,
+          success: false,
+          alreadyProcessed: false,
+        });
         continue;
       }
 
-      const taskId = requestIdParts.slice(0, -2).join('-'); // Remove last 2 segments (iteration, timestamp)
-      console.log(`[${timestamp}] [Results] Extracted taskId: ${taskId}`);
+      // Check idempotency - same result can only be posted once
+      if (isResultProcessed(result.requestId)) {
+        const existing = getResultProcessingInfo(result.requestId);
+        console.log(`[${timestamp}] [Results] Result already processed (idempotent): ${result.requestId}`);
+        processedResults.push({
+          requestId: result.requestId,
+          success: true,
+          alreadyProcessed: true,
+          processedAt: existing?.processedAt?.toISOString(),
+          taskId,
+        });
+        continue;
+      }
 
-      // Resume the graph with the result
-      await resumeGraph(taskId, result);
+      // Mark as processed BEFORE any other processing
+      const isNew = markResultProcessed(result.requestId, taskId);
+      console.log(`[${timestamp}] [Results] Result marked as processed: ${result.requestId}, isNew: ${isNew}`);
+
+      // Log the result data for debugging
+      console.log(`[${timestamp}] [Results] Result data:`, {
+        requestId: result.requestId,
+        taskId,
+        success: result.success,
+        hasData: !!result.data,
+        error: result.error,
+      });
+
+      processedResults.push({
+        requestId: result.requestId,
+        success: true,
+        alreadyProcessed: false,
+        taskId,
+      });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      results: processedResults,
+    });
   } catch (error) {
     console.error(`[${timestamp}] [Results] Error processing results:`, error);
     return NextResponse.json(
       { error: 'Failed to process results', details: error instanceof Error ? error.message : 'Unknown' },
       { status: 500 }
     );
-  }
-}
-
-/**
- * Resume the LangGraph with the extension result.
- * Uses Command({ resume }) to provide the result to the interrupted graph.
- */
-async function resumeGraph(taskId: string, result: {
-  requestId: string;
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}): Promise<void> {
-  const timestamp = new Date().toISOString();
-
-  try {
-    console.log('[Results] result:', JSON.stringify(result, null, 2));
-    // Get checkpointer and compile graph
-    const checkpointer = await getCheckpointer();
-    const graph = createExplorerGraph();
-    const compiled = graph.compile({ checkpointer });
-    const config = createThreadConfig(taskId);
-
-    console.log(`[${timestamp}] [Results] Resuming graph for task ${taskId}`);
-
-    const state = await compiled.getState(config);
-    console.log('[Results] Current state checkpoint:', JSON.stringify(state, null, 2));
-    console.log('[Results] Has pending calls:', state.values.toolCalls);
-
-    // Resume with Command({ resume })
-    // LangGraph loads checkpoint by thread_id, then interrupt() returns this value
-    const resumedState = await compiled.invoke(
-      new Command({
-        resume: {
-          success: result.success,
-          data: result.data,
-          error: result.error,
-        },
-      }),
-      config
-    );
-
-    console.log(`[${timestamp}] [Results] Graph resumed for task ${taskId}:`, {
-      terminationReason: resumedState.terminationReason,
-      finalResult: !!resumedState.finalResult,
-      discoveriesCount: resumedState.discoveries?.length,
-    });
-
-    // Handle terminal states
-    if (resumedState.terminationReason === 'generate_config' && resumedState.finalResult) {
-      await completeFetchTask(
-        taskId,
-        resumedState.finalResult.config as unknown as object,
-        resumedState.finalResult.confidence
-      );
-      console.log(`[${timestamp}] [Results] Task ${taskId} completed with confidence ${resumedState.finalResult.confidence}%`);
-    } else if (resumedState.terminationReason === 'fail' || resumedState.terminationReason === 'max_iterations') {
-      await failFetchTask(taskId, resumedState.finalResult?.reason ?? `Terminated: ${resumedState.terminationReason}`);
-      console.log(`[${timestamp}] [Results] Task ${taskId} failed: ${resumedState.terminationReason}`);
-    }
-  } catch (error) {
-    // Graph might not have an interrupt (already completed or no checkpoint)
-    console.log(`[${timestamp}] [Results] Graph resume error (may be normal if no checkpoint):`, error);
   }
 }

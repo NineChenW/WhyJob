@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { initializeExplorationState } from './graph';
 import { ExplorationStateWrapper } from './domain';
-import { groqDecisionSchema, parseDecisionResponse } from './prompts/schemas';
+import { groqDecisionSchema, parseDecisionResponse } from './nodes/llm-decision/prompts/schemas';
 
 // Test companies with known careers pages
 const TEST_COMPANIES = [

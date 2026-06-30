@@ -4,7 +4,7 @@ import { SYSTEM_PROMPT } from './system-prompt';
 import { buildContextPrompt } from './context-prompt';
 import { REACT_REASONING_PROMPT } from './react-prompt';
 import { DECISION_JSON_SCHEMA } from './schemas';
-import type { ExplorationState } from '../types';
+import type { ExplorationState } from '../../../types';
 
 export { SYSTEM_PROMPT } from './system-prompt';
 export { buildContextPrompt } from './context-prompt';

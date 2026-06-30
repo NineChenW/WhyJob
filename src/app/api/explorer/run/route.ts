@@ -9,13 +9,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeExplorationState } from '@/lib/ai/agents/explorer/graph';
-import { buildPromptChain, DECISION_JSON_SCHEMA } from '@/lib/ai/agents/explorer/prompts';
+import { callLlmForDecision } from '@/lib/ai/agents/explorer/nodes/llm-decision';
 import { buildFetchConfig } from '@/lib/ai/agents/explorer';
 import { EXPLORER_CONSTANTS, EXPLORATION_ACTION, TERMINAL_ACTIONS } from '@/lib/ai/agents/explorer/constants';
-import { explorerComplete, isExplorerAgentAIConfigured } from '@/lib/ai/client';
+import { isExplorerAgentAIConfigured } from '@/lib/ai/client';
 import { ExplorationStateWrapper } from '@/lib/ai/agents/explorer/domain';
 import type { ExplorationState, LLMDecision, Discovery, IterationSnapshot } from '@/lib/ai/agents/explorer/types';
-import type { ChatCompletionMessageParam } from 'openai/resources/index';
 
 interface RunRequest {
   companyName: string;
@@ -39,49 +38,11 @@ interface StepResult {
 }
 
 /**
- * Execute a single LLM decision loop
+ * Execute a single LLM decision using callLlmForDecision helper
  */
-async function executeLLMLoop(
-  state: ExplorationState,
-  stepNumber: number
-): Promise<{ decision: LLMDecision; snapshot: IterationSnapshot }> {
-  const wrapper = new ExplorationStateWrapper(state);
-  const includeReflection = !wrapper.isFirstIteration();
-
-  const { systemPrompt, userPrompt } = buildPromptChain({
-    state,
-    includeReflection,
-  });
-
-  const reflectionHint = includeReflection
-    ? '\n\n[Reflection] Consider if previous actions led to progress. Adjust strategy if needed.'
-    : '';
-
-  const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt + reflectionHint },
-  ];
-
-  const result = await explorerComplete({
-    messages,
-    response_format: { type: 'json_schema', json_schema: DECISION_JSON_SCHEMA },
-  });
-
-  const rawResponse = result.content;
-  if (!rawResponse) throw new Error('Empty AI response');
-
-  const decision = JSON.parse(rawResponse) as LLMDecision;
-
-  const snapshot: IterationSnapshot = {
-    stepNumber,
-    thought: decision.reasoning,
-    decision,
-    toolCall: undefined,
-    networkCalls: [],
-    timestamp: new Date(),
-  };
-
-  return { decision, snapshot };
+async function executeLLMLoop(state: ExplorationState, stepNumber: number): Promise<{ decision: LLMDecision }> {
+  const decision = await callLlmForDecision(state);
+  return { decision };
 }
 
 /**
@@ -221,12 +182,10 @@ export async function POST(request: NextRequest) {
       stepNumber++;
 
       let decision: LLMDecision;
-      let snapshot: IterationSnapshot;
 
       try {
         const result = await executeLLMLoop(wrapper.raw, stepNumber);
         decision = result.decision;
-        snapshot = result.snapshot;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.log("executeLLMLoop error:", errorMessage);
@@ -239,14 +198,6 @@ export async function POST(request: NextRequest) {
           target: { url: fallbackUrl },
           reasoning: `Fallback due to error: ${errorMessage}`,
           confidence: EXPLORER_CONSTANTS.LOW_CONFIDENCE,
-        };
-        snapshot = {
-          stepNumber,
-          thought: decision.reasoning,
-          decision,
-          toolCall: undefined,
-          networkCalls: [],
-          timestamp: new Date(),
         };
       }
 

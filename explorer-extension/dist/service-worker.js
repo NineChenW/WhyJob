@@ -23,6 +23,21 @@ var networkMonitorStore = {};
 var activeMonitoringId = null;
 var capturedCalls = [];
 var lastGetNetworkLogTime = 0;
+var commandHandlerMap = null;
+function getCommandHandlerMap() {
+  if (!commandHandlerMap) {
+    commandHandlerMap = {
+      NAVIGATE: (cmd) => executeNavigate(cmd.params, cmd.requestId),
+      GET_SNAPSHOT: (cmd) => executeGetSnapshot(cmd.requestId),
+      EXTRACT_DOM: (cmd) => executeExtractDom(cmd.params, cmd.requestId),
+      EXECUTE_JS: (cmd) => executeJs(cmd.params, cmd.requestId),
+      START_NETWORK_MONITORING: (cmd) => executeStartNetworkMonitoring(cmd.requestId),
+      GET_NETWORK_LOG: (cmd) => executeGetNetworkLog(cmd.params, cmd.requestId),
+      STOP_NETWORK_MONITORING: (cmd) => executeStopNetworkMonitoring(cmd.params, cmd.requestId)
+    };
+  }
+  return commandHandlerMap;
+}
 var webRequestListenerActive = false;
 async function pickupTask() {
   try {
@@ -45,34 +60,29 @@ async function pickupTask() {
     return null;
   }
 }
-async function pollCommands() {
-  if (!currentTaskId) {
-    return [];
+async function handlePollResponse(data) {
+  if (data.serverUrl && data.serverUrl !== config.serverUrl) {
+    config.serverUrl = data.serverUrl;
+    console.log("[Explorer Extension] Server URL updated:", config.serverUrl);
   }
+  if (data.taskStatus === "complete" || data.taskStatus === "failed") {
+    console.log(`[Explorer Extension] Task ${currentTaskId} is now ${data.taskStatus}`);
+    currentTaskId = null;
+    await closeTaskWindow();
+  }
+  return data.commands || [];
+}
+async function pollCommands() {
+  if (!currentTaskId) return [];
   try {
     const url = `${config.serverUrl}/commands?extensionId=${extensionId}&taskId=${currentTaskId}&t=${lastPollTime}`;
-    const response = await fetchWithTimeout(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json"
-      }
-    }, config.connectionTimeoutMs);
+    const response = await fetchWithTimeout(url, { method: "GET", headers: { "Content-Type": "application/json" } }, config.connectionTimeoutMs);
     if (!response.ok) {
       console.error(`[Explorer Extension] Poll failed: ${response.status}`);
       return [];
     }
     lastPollTime = Date.now();
-    const data = await response.json();
-    if (data.serverUrl && data.serverUrl !== config.serverUrl) {
-      config.serverUrl = data.serverUrl;
-      console.log("[Explorer Extension] Server URL updated:", config.serverUrl);
-    }
-    if (data.taskStatus === "complete" || data.taskStatus === "failed") {
-      console.log(`[Explorer Extension] Task ${currentTaskId} is now ${data.taskStatus}`);
-      currentTaskId = null;
-      await closeTaskWindow();
-    }
-    return data.commands || [];
+    return handlePollResponse(await response.json());
   } catch (error) {
     console.error("[Explorer Extension] Poll error:", error);
     return [];
@@ -198,40 +208,19 @@ async function pollLoopIteration() {
   try {
     isProcessingCycle = true;
     if (!currentTaskId) {
-      const pickupResult = await pickupTask();
-      if (pickupResult?.pickedUp && pickupResult.task) {
-        currentTaskId = pickupResult.task.id;
-        console.log("[Explorer Extension] Picked up task:", currentTaskId);
-        await createTaskWindow();
-      } else if (pickupResult?.alreadyProcessing && pickupResult.task) {
-        currentTaskId = pickupResult.task.id;
-        console.log("[Explorer Extension] Task already being processed:", currentTaskId);
-        await createTaskWindow();
-      } else {
-        currentTaskId = null;
-        return;
-      }
+      const hasTask = await pickupTaskIfNeeded();
+      if (!hasTask) return;
     }
     const allCommands = await pollCommands();
-    const commands = allCommands.filter((cmd) => {
-      if (recentlyExecutedIds.includes(cmd.requestId)) {
-        console.log(`[Explorer Extension] Ignoring duplicate command: ${cmd.type} (${cmd.requestId})`);
-        return false;
-      }
-      return true;
-    });
-    if (commands.length === 0) {
-      return;
-    }
+    const commands = filterDuplicateCommands(allCommands);
+    if (commands.length === 0) return;
+    await ensureTaskWindowForExecution();
     const cmdToExecute = commands[0];
     pendingCommandId = cmdToExecute.requestId;
     console.log(`[Explorer Extension] Executing: ${cmdToExecute.type} (${cmdToExecute.requestId})`);
     const results = await executeCommands([cmdToExecute]);
     await postResults(results);
-    recentlyExecutedIds.push(cmdToExecute.requestId);
-    if (recentlyExecutedIds.length > MAX_RECENTLY_EXECUTED) {
-      recentlyExecutedIds.shift();
-    }
+    trackExecutedCommand(cmdToExecute.requestId);
   } catch (error) {
     console.error("[Explorer Extension] Poll iteration error:", error);
   } finally {
@@ -239,41 +228,59 @@ async function pollLoopIteration() {
     isProcessingCycle = false;
   }
 }
+async function pickupTaskIfNeeded() {
+  if (currentTaskId) return true;
+  const result = await pickupTask();
+  if (result?.pickedUp && result.task) {
+    currentTaskId = result.task.id;
+    console.log("[Explorer Extension] Picked up task:", currentTaskId);
+    return true;
+  }
+  if (result?.alreadyProcessing && result.task) {
+    currentTaskId = result.task.id;
+    console.log("[Explorer Extension] Task already being processed:", currentTaskId);
+    return true;
+  }
+  currentTaskId = null;
+  return false;
+}
+function filterDuplicateCommands(allCommands) {
+  return allCommands.filter((cmd) => {
+    if (recentlyExecutedIds.includes(cmd.requestId)) {
+      console.log(`[Explorer Extension] Ignoring duplicate command: ${cmd.type} (${cmd.requestId})`);
+      return false;
+    }
+    return true;
+  });
+}
+async function ensureTaskWindowForExecution() {
+  if (currentTaskWindowId) return true;
+  console.log("[Explorer Extension] Creating task window for command execution");
+  await createTaskWindow();
+  return currentTaskWindowId !== null;
+}
+function trackExecutedCommand(requestId) {
+  recentlyExecutedIds.push(requestId);
+  if (recentlyExecutedIds.length > MAX_RECENTLY_EXECUTED) {
+    recentlyExecutedIds.shift();
+  }
+}
 async function executeCommands(commands) {
   const results = [];
+  const handlerMap = getCommandHandlerMap();
   for (const command of commands) {
     try {
       console.log(`[Explorer Extension] Executing: ${command.type} (${command.requestId})`);
-      let result;
-      switch (command.type) {
-        case "NAVIGATE":
-          result = await executeNavigate(command.params, command.requestId);
-          break;
-        case "GET_SNAPSHOT":
-          result = await executeGetSnapshot(command.requestId);
-          break;
-        case "EXTRACT_DOM":
-          result = await executeExtractDom(command.params, command.requestId);
-          break;
-        case "EXECUTE_JS":
-          result = await executeJs(command.params, command.requestId);
-          break;
-        case "START_NETWORK_MONITORING":
-          result = await executeStartNetworkMonitoring(command.requestId);
-          break;
-        case "GET_NETWORK_LOG":
-          result = await executeGetNetworkLog(command.params, command.requestId);
-          break;
-        case "STOP_NETWORK_MONITORING":
-          result = await executeStopNetworkMonitoring(command.params, command.requestId);
-          break;
-        default:
-          result = {
-            requestId: command.requestId,
-            success: false,
-            error: `Unknown command type: ${command.type}`
-          };
+      const handler = handlerMap[command.type];
+      if (!handler) {
+        results.push({
+          requestId: command.requestId,
+          success: false,
+          error: `Unknown command type: ${command.type}`
+        });
+        continue;
       }
+      const result = await handler(command);
       results.push(result);
     } catch (error) {
       results.push({
@@ -305,99 +312,61 @@ async function getTaskWindowTab() {
   }
   return null;
 }
+function removeNavigationListeners(onCompleted, onError) {
+  chrome.webNavigation.onCompleted.removeListener(onCompleted);
+  chrome.webNavigation.onErrorOccurred.removeListener(onError);
+}
 async function executeNavigate(params, requestId) {
   const targetUrl = params.url;
   const normalizedTarget = normalizeUrl(targetUrl);
   return new Promise((resolve) => {
-    let resolved = false;
+    const resolved = { value: false };
     const timeoutId = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      chrome.webNavigation.onCompleted.removeListener(onCompleted);
-      chrome.webNavigation.onErrorOccurred.removeListener(onError);
-      resolve({
-        requestId,
-        success: false,
-        error: "Navigation timeout (10s)"
-      });
+      if (resolved.value) return;
+      resolved.value = true;
+      removeNavigationListeners(onCompleted, onError);
+      resolve({ requestId, success: false, error: "Navigation timeout (10s)" });
     }, NAVIGATION_TIMEOUT_MS);
     const onCompleted = (details) => {
       chrome.tabs.get(details.tabId, (tabInfo) => {
-        if (chrome.runtime.lastError || !tabInfo?.windowId || tabInfo.windowId !== currentTaskWindowId) {
-          return;
-        }
+        if (chrome.runtime.lastError || !tabInfo?.windowId || tabInfo.windowId !== currentTaskWindowId) return;
         const normalizedActual = normalizeUrl(details.url);
         if (normalizedActual === normalizedTarget || details.url.startsWith(targetUrl)) {
-          if (resolved) return;
-          resolved = true;
+          if (resolved.value) return;
+          resolved.value = true;
           clearTimeout(timeoutId);
-          chrome.webNavigation.onCompleted.removeListener(onCompleted);
-          chrome.webNavigation.onErrorOccurred.removeListener(onError);
-          resolve({
-            requestId,
-            success: true,
-            data: {
-              success: true,
-              url: tabInfo.url || targetUrl,
-              title: tabInfo.title || ""
-            }
-          });
+          removeNavigationListeners(onCompleted, onError);
+          resolve({ requestId, success: true, data: { success: true, url: tabInfo.url || targetUrl, title: tabInfo.title || "" } });
         }
       });
     };
     const onError = (details) => {
       chrome.tabs.get(details.tabId, (tabInfo) => {
-        if (chrome.runtime.lastError || !tabInfo?.windowId || tabInfo.windowId !== currentTaskWindowId) {
-          return;
-        }
-        if (resolved) return;
-        resolved = true;
+        if (chrome.runtime.lastError || !tabInfo?.windowId || tabInfo.windowId !== currentTaskWindowId) return;
+        if (resolved.value) return;
+        resolved.value = true;
         clearTimeout(timeoutId);
-        chrome.webNavigation.onCompleted.removeListener(onCompleted);
-        chrome.webNavigation.onErrorOccurred.removeListener(onError);
-        resolve({
-          requestId,
-          success: false,
-          data: {
-            success: false,
-            url: targetUrl,
-            title: "",
-            error: details.error
-          }
-        });
+        removeNavigationListeners(onCompleted, onError);
+        resolve({ requestId, success: false, data: { success: false, url: targetUrl, title: "", error: details.error } });
       });
     };
     chrome.webNavigation.onCompleted.addListener(onCompleted);
     chrome.webNavigation.onErrorOccurred.addListener(onError);
     getTaskWindowTab().then((tab) => {
       if (!tab?.id) {
-        if (resolved) return;
-        resolved = true;
+        if (resolved.value) return;
+        resolved.value = true;
         clearTimeout(timeoutId);
-        chrome.webNavigation.onCompleted.removeListener(onCompleted);
-        chrome.webNavigation.onErrorOccurred.removeListener(onError);
-        resolve({
-          requestId,
-          success: false,
-          error: "No tab in task window"
-        });
+        removeNavigationListeners(onCompleted, onError);
+        resolve({ requestId, success: false, error: "No tab in task window" });
         return;
       }
       if (tab.url && normalizeUrl(tab.url) === normalizedTarget) {
-        if (resolved) return;
-        resolved = true;
+        if (resolved.value) return;
+        resolved.value = true;
         clearTimeout(timeoutId);
-        chrome.webNavigation.onCompleted.removeListener(onCompleted);
-        chrome.webNavigation.onErrorOccurred.removeListener(onError);
-        resolve({
-          requestId,
-          success: true,
-          data: {
-            success: true,
-            url: tab.url,
-            title: tab.title || ""
-          }
-        });
+        removeNavigationListeners(onCompleted, onError);
+        resolve({ requestId, success: true, data: { success: true, url: tab.url, title: tab.title || "" } });
         return;
       }
       capturedCalls = [];
@@ -417,66 +386,27 @@ function normalizeUrl(url) {
     return url;
   }
 }
-async function executeGetSnapshot(requestId) {
-  const tab = await getTaskWindowTab();
-  if (!tab?.id) {
-    return {
-      requestId,
-      success: false,
-      error: "No active tab in task window"
-    };
-  }
-  const tabId = tab.id;
+async function callContentScript(tabId, requestId, messageType, params) {
   return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, { type: "GET_SNAPSHOT" }, (response) => {
+    chrome.tabs.sendMessage(tabId, { type: messageType, ...params ? { params } : {} }, (response) => {
       if (chrome.runtime.lastError) {
-        console.error("[Explorer Extension] Snapshot failed:", chrome.runtime.lastError);
-        resolve({
-          requestId,
-          success: false,
-          error: chrome.runtime.lastError.message
-        });
+        console.error(`[Explorer Extension] ${messageType} failed:`, chrome.runtime.lastError);
+        resolve({ requestId, success: false, error: chrome.runtime.lastError.message });
         return;
       }
-      resolve({
-        requestId,
-        success: true,
-        data: response
-      });
+      resolve({ requestId, success: true, data: response });
     });
   });
 }
+async function executeGetSnapshot(requestId) {
+  const tab = await getTaskWindowTab();
+  if (!tab?.id) return { requestId, success: false, error: "No active tab in task window" };
+  return callContentScript(tab.id, requestId, "GET_SNAPSHOT");
+}
 async function executeExtractDom(params, requestId) {
   const tab = await getTaskWindowTab();
-  if (!tab?.id) {
-    return {
-      requestId,
-      success: false,
-      error: "No active tab in task window"
-    };
-  }
-  const tabId = tab.id;
-  return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, {
-      type: "EXTRACT_DOM",
-      params
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error("[Explorer Extension] Extract DOM failed:", chrome.runtime.lastError);
-        resolve({
-          requestId,
-          success: false,
-          error: chrome.runtime.lastError.message
-        });
-        return;
-      }
-      resolve({
-        requestId,
-        success: true,
-        data: response
-      });
-    });
-  });
+  if (!tab?.id) return { requestId, success: false, error: "No active tab in task window" };
+  return callContentScript(tab.id, requestId, "EXTRACT_DOM", params);
 }
 function generateNetworkCallId() {
   return "nc_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
@@ -491,180 +421,125 @@ function handleNetworkCompleted(details) {
     status: details.statusCode || 0,
     responseType: details.type === "xmlhttprequest" ? "xhr" : "fetch",
     timing: 0,
-    // Timing not available from onCompleted
     requestHeaders: {},
-    // Headers not available from onCompleted in MV3
     responseHeaders: {},
-    // Would need onHeadersReceived for this
     timestamp: /* @__PURE__ */ new Date()
   };
-  if (networkMonitorStore[activeMonitoringId]) {
-    networkMonitorStore[activeMonitoringId].calls.push(call);
+  const session = networkMonitorStore[activeMonitoringId];
+  if (session) {
+    session.calls.push(call);
     capturedCalls.push(call);
-    if (capturedCalls.length > MAX_NETWORK_CALLS_STORED) {
-      capturedCalls = capturedCalls.slice(-MAX_NETWORK_CALLS_STORED);
-    }
-    if (networkMonitorStore[activeMonitoringId].calls.length > MAX_NETWORK_CALLS_STORED) {
-      networkMonitorStore[activeMonitoringId].calls = networkMonitorStore[activeMonitoringId].calls.slice(-MAX_NETWORK_CALLS_STORED);
-    }
+    enforceCallLimit(session.calls);
+    enforceCallLimit(capturedCalls);
   }
+}
+function enforceCallLimit(calls) {
+  if (calls.length > MAX_NETWORK_CALLS_STORED) {
+    calls.splice(0, calls.length - MAX_NETWORK_CALLS_STORED);
+  }
+}
+function makeJsTimeoutResult(requestId) {
+  return { requestId, success: false, data: { success: false, error: "Script timeout after 5000ms", duration: JS_EXECUTION_TIMEOUT_MS } };
+}
+function makeJsErrorResult(requestId, error, output) {
+  return { requestId, success: false, data: { success: false, error, output, duration: JS_EXECUTION_TIMEOUT_MS } };
 }
 async function executeJs(params, requestId) {
   const tab = await getTaskWindowTab();
-  if (!tab?.id) {
-    return {
-      requestId,
-      success: false,
-      error: "No active tab in task window"
-    };
-  }
+  if (!tab?.id) return { requestId, success: false, error: "No active tab in task window" };
   const tabId = tab.id;
   return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => {
-      resolve({
-        requestId,
-        success: false,
-        data: {
-          success: false,
-          error: "Script timeout after 5000ms",
-          duration: JS_EXECUTION_TIMEOUT_MS
-        }
-      });
-    }, JS_EXECUTION_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => resolve(makeJsTimeoutResult(requestId)), JS_EXECUTION_TIMEOUT_MS);
     chrome.scripting.executeScript({
       target: { tabId },
       func: (script, args) => {
         const logs = [];
         const originalLog = console.log;
-        console.log = (...args2) => {
-          logs.push(args2.map((a) => String(a)).join(" "));
+        console.log = (...a) => {
+          logs.push(a.map(String).join(" "));
         };
         try {
           const result = new Function("args", `with(args) { return eval(${JSON.stringify(script)}); }`)(args || {});
           console.log = originalLog;
-          return {
-            success: true,
-            output: logs.join("\n").slice(0, 1e3) || (result !== void 0 ? String(result).slice(0, 1e3) : ""),
-            duration: 0
-          };
+          return { success: true, output: logs.join("\n").slice(0, 1e3) || (result !== void 0 ? String(result).slice(0, 1e3) : ""), duration: 0 };
         } catch (error) {
           console.log = originalLog;
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            output: logs.join("\n").slice(0, 1e3),
-            duration: 0
-          };
+          return { success: false, error: error instanceof Error ? error.message : String(error), output: logs.join("\n").slice(0, 1e3), duration: 0 };
         }
       },
       args: [params.script, params.args || {}]
     }).then((results) => {
       clearTimeout(timeoutId);
       const result = results[0]?.result;
-      resolve({
-        requestId,
-        success: result?.success ?? false,
-        data: result
-      });
+      resolve({ requestId, success: result?.success ?? false, data: result });
     }).catch((error) => {
       clearTimeout(timeoutId);
-      resolve({
-        requestId,
-        success: false,
-        data: {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-          duration: JS_EXECUTION_TIMEOUT_MS
-        }
-      });
+      resolve(makeJsErrorResult(requestId, error instanceof Error ? error.message : String(error)));
     });
   });
 }
+function generateMonitoringId() {
+  return "monitor_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+}
+function activateNetworkListener() {
+  if (webRequestListenerActive) return;
+  chrome.webRequest.onCompleted.addListener(handleNetworkCompleted, {
+    urls: ["<all_urls>"],
+    types: ["xmlhttprequest"]
+  });
+  webRequestListenerActive = true;
+  console.log("[Explorer Extension] WebRequest listener activated");
+}
 async function executeStartNetworkMonitoring(requestId) {
   if (activeMonitoringId !== null) {
-    return {
-      requestId,
-      success: false,
-      data: {
-        success: false,
-        monitoringId: activeMonitoringId,
-        message: "Monitoring already active"
-      }
-    };
+    return { requestId, success: false, data: { success: false, monitoringId: activeMonitoringId, message: "Monitoring already active" } };
   }
-  const monitoringId = "monitor_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
-  networkMonitorStore[monitoringId] = {
-    calls: [],
-    startTime: Date.now()
-  };
+  const monitoringId = generateMonitoringId();
+  networkMonitorStore[monitoringId] = { calls: [], startTime: Date.now() };
   activeMonitoringId = monitoringId;
   capturedCalls = [];
   lastGetNetworkLogTime = 0;
-  if (!webRequestListenerActive) {
-    chrome.webRequest.onCompleted.addListener(handleNetworkCompleted, {
-      urls: ["<all_urls>"],
-      types: ["xmlhttprequest"]
-      // Only xmlhttprequest is valid; it captures both XHR and fetch
-    });
-    webRequestListenerActive = true;
-    console.log("[Explorer Extension] WebRequest listener activated");
-  }
+  activateNetworkListener();
   console.log("[Explorer Extension] Network monitoring started:", monitoringId);
-  return {
-    requestId,
-    success: true,
-    data: {
-      success: true,
-      monitoringId,
-      message: "Network monitoring started"
-    }
-  };
+  return { requestId, success: true, data: { success: true, monitoringId, message: "Network monitoring started" } };
+}
+function filterByUrlPattern(calls, urlPattern) {
+  try {
+    const regex = new RegExp(urlPattern);
+    return calls.filter((call) => regex.test(call.url));
+  } catch {
+    return calls;
+  }
+}
+function filterByMethods(calls, methods) {
+  return calls.filter((call) => methods.includes(call.method));
+}
+function filterByStatusRange(calls, statusRange) {
+  const rangeMap = { "2xx": 2, "3xx": 3, "4xx": 4, "5xx": 5 };
+  const firstDigit = rangeMap[statusRange];
+  return calls.filter((call) => Math.floor(call.status / 100) === firstDigit);
 }
 async function executeGetNetworkLog(params, requestId) {
   const monitoringId = params?.monitoringId || activeMonitoringId;
   const session = monitoringId ? networkMonitorStore[monitoringId] : null;
   if (!session && monitoringId) {
-    return {
-      requestId,
-      success: false,
-      data: {
-        calls: [],
-        count: 0,
-        hasMore: false
-      }
-    };
+    return { requestId, success: false, data: { calls: [], count: 0, hasMore: false } };
   }
   const allCalls = session ? session.calls : capturedCalls;
   let filteredCalls = allCalls;
   if (params?.filter) {
     const { urlPattern, methods, statusRange } = params.filter;
-    filteredCalls = filteredCalls.filter((call) => {
-      if (urlPattern) {
-        try {
-          const regex = new RegExp(urlPattern);
-          if (!regex.test(call.url)) return false;
-        } catch {
-        }
-      }
-      if (methods && methods.length > 0) {
-        if (!methods.includes(call.method)) return false;
-      }
-      if (statusRange) {
-        const firstDigit = Math.floor(call.status / 100);
-        const rangeMap = { "2xx": 2, "3xx": 3, "4xx": 4, "5xx": 5 };
-        if (firstDigit !== rangeMap[statusRange]) return false;
-      }
-      return true;
-    });
+    if (urlPattern) filteredCalls = filterByUrlPattern(filteredCalls, urlPattern);
+    if (methods?.length) filteredCalls = filterByMethods(filteredCalls, methods);
+    if (statusRange) filteredCalls = filterByStatusRange(filteredCalls, statusRange);
   }
-  const hasMore = filteredCalls.length > MAX_NETWORK_CALLS_STORED;
   return {
     requestId,
     success: true,
     data: {
       calls: filteredCalls,
       count: filteredCalls.length,
-      hasMore
+      hasMore: filteredCalls.length > MAX_NETWORK_CALLS_STORED
     }
   };
 }

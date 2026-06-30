@@ -29,6 +29,11 @@
 - Otherwise, fetch data directly in server components
 - Dynamic routes for item/collection pages
 
+## LangGraph(JS)
+
+- Ensure each node only forcus on one responsibility
+- LangGraph Docs: https://langchain-ai.github.io/langgraph/
+
 ## Tailwind CSS v4
 
 **CRITICAL**: We are using Tailwind CSS v4, which uses CSS-based configuration.
@@ -95,7 +100,10 @@ Example v4 configuration:
 
 - No commented-out code unless specified
 - No unused imports or variables
-- Keep functions under 50 lines when possible
+- Keep functions under 30 lines when possible
+- Ensure each method shows clear process steps, each step with sub-methods or fewer than three lines of code
+- Keep all the methods, constants, and configs, etc., that are used directly and only used inside the file, and manage them all in the same file. Don't need to export them.
+- Every time add a new function, give a second thought to whether this function could be commonly used.
 
 ## Testing
 
