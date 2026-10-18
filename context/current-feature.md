@@ -13,17 +13,28 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature
+# Current Feature: RAG Pipeline 01 - Explore Embeddings
 
 ## Status
 
-Not Start
+In Progress
 
 ## Goals
 
-
+- Create `rag/01-explore-embeddings.ts` standalone script (runnable via tsx/ts-node, no UI)
+- Embed 5 short strings (payment reconciliation x2, LangGraph state graph, Douyin ad placement, dumplings recipe)
+- Print vector length and first 8 values of each embedding
+- Print a 5x5 cosine-similarity matrix using a hand-written ~10-line helper (no external library)
+- Log the embedding model name in output (phases 2-3 must reuse the exact same model)
 
 ## Notes
+
+- Spec: context/features/rag-pipeline-01-explore-embeddings-spec.md
+- Plan: docs/rag-pipeline-execution-plan.md (Section 3, Phase 1)
+- Embedding provider: NVIDIA `nemotron-3-embed-1b` via existing OpenAI-compatible endpoint
+- Checkpoint: payment sentences score ~0.7-0.9 with each other, ~0.2-0.4 with "dumplings"
+- Out of scope: chunking, pgvector, retrieval loop, LLM answering, UI
+- Debug aid: all similarities ~0.5 with no contrast → embedding call likely returned empty strings; log vector length + first values
 
 
 
