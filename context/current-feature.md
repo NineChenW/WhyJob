@@ -13,33 +13,25 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature: RAG Pipeline 01 - Explore Embeddings
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Create `rag/01-explore-embeddings.ts` standalone script (runnable via tsx/ts-node, no UI)
-- Embed 5 short strings (payment reconciliation x2, LangGraph state graph, Douyin ad placement, dumplings recipe)
-- Print vector length and first 8 values of each embedding
-- Print a 5x5 cosine-similarity matrix using a hand-written ~10-line helper (no external library)
-- Log the embedding model name in output (phases 2-3 must reuse the exact same model)
+- 
 
 ## Notes
 
-- Spec: context/features/rag-pipeline-01-explore-embeddings-spec.md
-- Plan: docs/rag-pipeline-execution-plan.md (Section 3, Phase 1)
-- Embedding provider: NVIDIA `nemotron-3-embed-1b` via existing OpenAI-compatible endpoint
-- Checkpoint: payment sentences score ~0.7-0.9 with each other, ~0.2-0.4 with "dumplings"
-- Out of scope: chunking, pgvector, retrieval loop, LLM answering, UI
-- Debug aid: all similarities ~0.5 with no contrast → embedding call likely returned empty strings; log vector length + first values
+- 
 
 
 
 ## History
 
+- **2026-10-18**: RAG Pipeline 01 - Explore Embeddings - Created rag/01-explore-embeddings.ts standalone script: embeds 5 sample strings via NVIDIA nemotron-3-embed-1b (OpenAI-compatible endpoint), prints vector length + first 8 values, 5x5 cosine-similarity matrix with hand-written helper. Key finding: input_type='query' required for meaningful contrast (payment pair 0.87, cross-topic ~0.1); phases 2-3 must reuse same model + input_type. Build passes, 98 tests pass.
 - **2026-06-29**: Explorer Extension Protocol Alignment (Iteration 13) - Updated commands/results APIs to use proper PollResponse/ResultPayload types from explorer-extension. Created shared types in src/lib/http/explorer-types.ts. Test page now properly tests extension polling pattern. Build passes, 96 tests pass.
 - **2026-06-29**: Explorer Extension Refactor - Refactored service-worker.ts to meet code quality standards: each method shows clear process steps, each step with sub-methods or ≤3 lines. Added command handler map, navigation helpers, network filter helpers, content script caller, and polling loop helpers. Build passes, tests pass.
 - **2026-06-22**: Explorer Agent - Checkpointer + Interrupt (Iteration 12) - Add PostgresSaver checkpointer, use interrupt() for async pause/resume, remove all AgentStateLog dependencies. Build passes, tests pass.
