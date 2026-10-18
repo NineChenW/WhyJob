@@ -8,7 +8,8 @@
     "webNavigation",
     "webRequest",
     "scripting",
-    "tabs"
+    "tabs",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

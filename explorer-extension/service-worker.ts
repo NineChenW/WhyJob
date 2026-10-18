@@ -35,6 +35,11 @@ import {
 // State
 // ============================================
 
+const STORAGE_KEYS = {
+  TASK_WINDOW_ID: 'currentTaskWindowId',
+  CURRENT_TASK_ID: 'currentTaskId',
+} as const;
+
 let config: PollingConfig = { ...DEFAULT_CONFIG };
 let extensionId: string = 'explorer-extension-' + Math.random().toString(36).slice(2, 8);
 let isPolling = false;
@@ -48,7 +53,7 @@ let recentlyExecutedIds: string[] = []; // Track last N executed requestIds for 
 
 // Network monitoring state
 let networkMonitorStore: NetworkCallStore = {};
-let acensureTaskWindowForExecutiontiveMonitoringId: string | null = null;
+let activeMonitoringId: string | null = null;
 let capturedCalls: CapturedNetworkCall[] = [];
 let lastGetNetworkLogTime = 0;
 
@@ -81,7 +86,7 @@ let webRequestListenerActive = false;
 async function pickupTask(): Promise<{
   pickedUp: boolean;
   alreadyProcessing: boolean;
-  task: { id: string; companyId: string; contentTypes: string[] } | null;
+  task: { id: string; companyId: string; contentTypes: string[]; status: string } | null;
 } | null> {
   try {
     const baseUrl = config.serverUrl.replace(/\/api\/agent$/, '');
@@ -113,11 +118,6 @@ async function handlePollResponse(data: PollResponse): Promise<Command[]> {
   if (data.serverUrl && data.serverUrl !== config.serverUrl) {
     config.serverUrl = data.serverUrl;
     console.log('[Explorer Extension] Server URL updated:', config.serverUrl);
-  }
-  if (data.taskStatus === 'complete' || data.taskStatus === 'failed') {
-    console.log(`[Explorer Extension] Task ${currentTaskId} is now ${data.taskStatus}`);
-    currentTaskId = null;
-    await closeTaskWindow();
   }
   return data.commands || [];
 }
@@ -190,6 +190,59 @@ async function fetchWithTimeout(
 }
 
 // ============================================
+// Chrome Storage Helpers
+// ============================================
+
+/**
+ * Check if chrome.storage is available
+ */
+function isStorageAvailable(): boolean {
+  return typeof chrome !== 'undefined' && chrome.storage && typeof chrome.storage.local !== 'undefined';
+}
+
+/**
+ * Save task window ID to chrome.storage.local
+ */
+async function saveTaskWindowId(windowId: number | null): Promise<void> {
+  if (!isStorageAvailable()) return;
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.TASK_WINDOW_ID]: windowId });
+  } catch (error) {
+    console.error('[Explorer Extension] Failed to save windowId to storage:', error);
+  }
+}
+
+/**
+ * Load task window ID from chrome.storage.local and verify window still exists
+ */
+async function loadTaskWindowId(): Promise<number | null> {
+  if (!isStorageAvailable()) return null;
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.TASK_WINDOW_ID);
+    const savedWindowId = result[STORAGE_KEYS.TASK_WINDOW_ID] as number | undefined;
+
+    if (savedWindowId === undefined || savedWindowId === null) {
+      return null;
+    }
+
+    // Step: Check if window still exists
+    try {
+      await chrome.windows.get(savedWindowId);
+      console.log('[Explorer Extension] Loaded existing windowId from storage:', savedWindowId);
+      return savedWindowId;
+    } catch {
+      // Window no longer exists, clear storage
+      console.log('[Explorer Extension] Window no longer exists, clearing storage');
+      await chrome.storage.local.set({ [STORAGE_KEYS.TASK_WINDOW_ID]: null });
+      return null;
+    }
+  } catch (error) {
+    console.error('[Explorer Extension] Failed to load windowId from storage:', error);
+    return null;
+  }
+}
+
+// ============================================
 // Task Window Management
 // ============================================
 
@@ -206,9 +259,10 @@ async function createTaskWindow(): Promise<number | null> {
         url: 'about:blank',
         focused: true,
       },
-      (window) => {
+      async (window: chrome.windows.Window | undefined) => {
         if (window && window.id) {
           currentTaskWindowId = window.id;
+          await saveTaskWindowId(window.id);
           console.log('[Explorer Extension] Created task window:', window.id);
           resolve(window.id);
         } else {
@@ -233,6 +287,7 @@ async function closeTaskWindow(): Promise<void> {
       console.log('[Explorer Extension] Window already closed or error:', error);
     }
     currentTaskWindowId = null;
+    await saveTaskWindowId(null);
   }
 }
 
@@ -247,8 +302,11 @@ async function closeTaskWindow(): Promise<void> {
 async function startPolling(): Promise<void> {
   if (isPolling) return;
 
+  // Step: Restore windowId from storage (if window still exists)
+  currentTaskWindowId = await loadTaskWindowId();
+
   isPolling = true;
-  console.log('[Explorer Extension] Starting poll loop');
+  console.log('[Explorer Extension] Starting poll loop', { restoredWindowId: currentTaskWindowId });
 
   // Initial pickup attempt
   await attemptPickup();
@@ -282,28 +340,77 @@ async function pollLoopRecursive(): Promise<void> {
 }
 
 /**
- * Attempt to pick up a task and create a window for it
+ * Handle task completion or failure - clean up state and window
+ * Returns true if task is done (complete/failed), false if still active
+ */
+async function handleTaskCompletion(taskId: string | null, taskStatus: string | null): boolean {
+  if (taskStatus === 'complete' || taskStatus === 'failed') {
+    console.log(`[Explorer Extension] Task ${taskId} is ${taskStatus} - cleaning up`);
+    currentTaskId = null;
+    // Only close window when task is truly done (not during 'exploring')
+    await closeTaskWindow();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Attempt to pick up a task and reuse existing window if already processing
  */
 async function attemptPickup(): Promise<boolean> {
   // If we're already processing a command, don't try to pick up a new task
   if (currentTaskId && (pendingCommandId || isProcessingCycle)) {
+    console.log('[Explorer Extension] Skipping pickup - already processing task:', currentTaskId);
     return true;
   }
-
-  // Close any existing window before picking up new task
-  await closeTaskWindow();
 
   const pickupResult = await pickupTask();
   if (pickupResult) {
     if (pickupResult.pickedUp || pickupResult.alreadyProcessing) {
-      currentTaskId = pickupResult.task?.id ?? null;
-      console.log('[Explorer Extension] Picked up task:', currentTaskId);
+      const newTaskId = pickupResult.task?.id ?? null;
+      const taskStatus = pickupResult.task?.status ?? null;
+      if(currentTaskId === null) {
+        currentTaskId = newTaskId;
+      }
+      const isSameTask = currentTaskId === newTaskId;
 
-      // Create a new window for this task
-      await createTaskWindow();
+      console.log('[Explorer Extension] Pickup result:', {
+        pickedUp: pickupResult.pickedUp,
+        alreadyProcessing: pickupResult.alreadyProcessing,
+        taskId: newTaskId,
+        taskStatus: taskStatus,
+        sameTask: isSameTask,
+        hadWindowId: currentTaskWindowId,
+      });
+
+      // Step: Check if task is complete or failed
+      if (await handleTaskCompletion(newTaskId, taskStatus)) {
+        return false;
+      }
+
+      // Step: Only close window if switching to a DIFFERENT task
+      if (!isSameTask) {
+        console.log('[Explorer Extension] isSameTask - ', currentTaskId, newTaskId);
+        console.log('[Explorer Extension] Different task - closing existing window');
+        await closeTaskWindow();
+      } else if (currentTaskWindowId) {
+        console.log('[Explorer Extension] Same task - reusing existing window:', currentTaskWindowId);
+      }
+
+      currentTaskId = newTaskId;
+
+      // Step: Only create window if we don't have one yet
+      if (!currentTaskWindowId) {
+        console.log('[Explorer Extension] No existing window - creating new one');
+        await createTaskWindow();
+      }
       return true;
     } else {
       console.log('[Explorer Extension] No pending tasks');
+      // Only close window if we had one
+      if (currentTaskId) {
+        await closeTaskWindow();
+      }
       currentTaskId = null;
     }
   }
@@ -464,6 +571,15 @@ async function executeCommands(commands: Command[]): Promise<CommandResult[]> {
  * Get the active tab in the task window
  */
 async function getTaskWindowTab(): Promise<chrome.tabs.Tab | null> {
+  let tab = await queryTaskWindowTab();
+  if (tab) return tab;
+
+  await createTaskWindow();
+  tab = await queryTaskWindowTab();
+  return tab;
+}
+
+async function queryTaskWindowTab() {
   if (!currentTaskWindowId) {
     // Fallback: try to get any tab in the window
     const windows = await chrome.windows.getAll({ populate: true });
@@ -483,9 +599,11 @@ async function getTaskWindowTab(): Promise<chrome.tabs.Tab | null> {
   } catch (error) {
     console.error('[Explorer Extension] Failed to get task window tab:', error);
   }
-
   return null;
 }
+
+
+
 
 /**
  * Remove navigation listeners (cleanup helper)
@@ -707,7 +825,7 @@ function makeJsErrorResult(requestId: string, error: string, output?: string): C
  * Steps:
  * 1. Get task window tab
  * 2. Setup timeout guard
- * 3. Execute script via chrome.scripting.executeScript
+ * 3. Execute script via chrome.scripting.executeScript (CSP-compliant)
  */
 async function executeJs(params: ExecuteJsParams, requestId: string): Promise<CommandResult> {
   // Step 1: Get task window tab
@@ -720,23 +838,28 @@ async function executeJs(params: ExecuteJsParams, requestId: string): Promise<Co
     // Step 2: Setup timeout
     const timeoutId = setTimeout(() => resolve(makeJsTimeoutResult(requestId)), JS_EXECUTION_TIMEOUT_MS);
 
-    // Step 3: Execute script (inline func required by MV3 chrome.scripting API)
+    // Step 3: Execute script via CSP-compliant method (script element injection)
     chrome.scripting.executeScript({
       target: { tabId },
-      func: (script, args) => {
+      world: 'MAIN', // Execute in the actual page context
+      func: (script: string) => {
         const logs: string[] = [];
         const originalLog = console.log;
         console.log = (...a: unknown[]) => { logs.push(a.map(String).join(' ')); };
         try {
-          const result = new Function('args', `with(args) { return eval(${JSON.stringify(script)}); }`)(args || {});
+          // Use script element injection (CSP-compliant, works in MAIN world)
+          const el = document.createElement('script');
+          el.textContent = script;
+          (document.head || document.documentElement).appendChild(el);
+          el.remove();
           console.log = originalLog;
-          return { success: true, output: logs.join('\n').slice(0, 1000) || (result !== undefined ? String(result).slice(0, 1000) : ''), duration: 0 };
+          return { success: true, output: logs.join('\n').slice(0, 1000) || 'Script executed', duration: 0 };
         } catch (error) {
           console.log = originalLog;
           return { success: false, error: error instanceof Error ? error.message : String(error), output: logs.join('\n').slice(0, 1000), duration: 0 };
         }
       },
-      args: [params.script, params.args || {}],
+      args: [params.script],
     }).then((results) => {
       clearTimeout(timeoutId);
       const result = results[0]?.result as ExecuteJsResult | undefined;

@@ -45,7 +45,7 @@ const COMMAND_TYPES: { value: CommandType; label: string; params: string[] }[] =
 ];
 
 export default function ExplorerTestPage() {
-  const [taskId, setTaskId] = useState('test-task-001');
+  const [taskId, setTaskId] = useState('cmqxle7gx0000wvl0mof39ydd');
 
   // Command state
   const [selectedAction, setSelectedAction] = useState<CommandType>('NAVIGATE');

@@ -179,8 +179,8 @@ export interface PollingConfig {
 
 export const DEFAULT_CONFIG: PollingConfig = {
   serverUrl: 'http://localhost:3000/api/agent',
-  pollIntervalMs: 2000,
-  connectionTimeoutMs: 10000,
+  pollIntervalMs: 4000,
+  connectionTimeoutMs: 20000,
 };
 
 // Constants

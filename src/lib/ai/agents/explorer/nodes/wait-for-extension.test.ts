@@ -7,10 +7,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ExplorationStateWrapper } from '../domain';
 
-// Mock @langchain/langgraph before importing the node
-vi.mock('@langchain/langgraph', () => ({
-  interrupt: vi.fn(),
-}));
+// Mock @langchain/langgraph before importing the node,
+// keeping the real Annotation implementation for ../graph
+vi.mock(import('@langchain/langgraph'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    interrupt: vi.fn(),
+  };
+});
 
 import { waitForExtensionNode } from './wait-for-extension';
 import { interrupt } from '@langchain/langgraph';
@@ -59,13 +64,14 @@ describe('waitForExtensionNode', () => {
   };
 
   describe('when no pending tool call exists', () => {
-    it('should return empty update and warn', async () => {
+    it('should warn and pass state through unchanged', async () => {
       const wrapper = createMockWrapper(false);
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const result = await waitForExtensionNode(wrapper.raw);
 
-      expect(result).toEqual({});
+      expect(result.history).toEqual(wrapper.raw.history);
+      expect(result.result).toBeUndefined();
       expect(consoleSpy).toHaveBeenCalledWith('[wait-for-extension] No pending tool call found');
       consoleSpy.mockRestore();
     });
@@ -83,9 +89,11 @@ describe('waitForExtensionNode', () => {
       // interrupt should have been called
       expect(interrupt).toHaveBeenCalledWith(null);
 
-      // Since interrupt returns undefined (first invocation), the node returns empty
+      // Since interrupt returns undefined (first invocation), the pending call stays pending
       const result = await resultPromise;
-      expect(result).toEqual({});
+      const lastSnapshot = result.history?.snapshots.at(-1);
+      expect(lastSnapshot?.toolCall?.status).toBe('pending');
+      expect(result.history?.waitingForExtensionResult).toBeUndefined();
     });
   });
 });

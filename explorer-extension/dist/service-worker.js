@@ -1,14 +1,18 @@
 // types.ts
 var DEFAULT_CONFIG = {
   serverUrl: "http://localhost:3000/api/agent",
-  pollIntervalMs: 2e3,
-  connectionTimeoutMs: 1e4
+  pollIntervalMs: 4e3,
+  connectionTimeoutMs: 2e4
 };
 var NAVIGATION_TIMEOUT_MS = 2e4;
 var JS_EXECUTION_TIMEOUT_MS = 5e3;
 var MAX_NETWORK_CALLS_STORED = 500;
 
 // service-worker.ts
+var STORAGE_KEYS = {
+  TASK_WINDOW_ID: "currentTaskWindowId",
+  CURRENT_TASK_ID: "currentTaskId"
+};
 var config = { ...DEFAULT_CONFIG };
 var extensionId = "explorer-extension-" + Math.random().toString(36).slice(2, 8);
 var isPolling = false;
@@ -65,11 +69,6 @@ async function handlePollResponse(data) {
     config.serverUrl = data.serverUrl;
     console.log("[Explorer Extension] Server URL updated:", config.serverUrl);
   }
-  if (data.taskStatus === "complete" || data.taskStatus === "failed") {
-    console.log(`[Explorer Extension] Task ${currentTaskId} is now ${data.taskStatus}`);
-    currentTaskId = null;
-    await closeTaskWindow();
-  }
   return data.commands || [];
 }
 async function pollCommands() {
@@ -122,6 +121,39 @@ async function fetchWithTimeout(url, options, timeoutMs) {
     clearTimeout(timeoutId);
   }
 }
+function isStorageAvailable() {
+  return typeof chrome !== "undefined" && chrome.storage && typeof chrome.storage.local !== "undefined";
+}
+async function saveTaskWindowId(windowId) {
+  if (!isStorageAvailable()) return;
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.TASK_WINDOW_ID]: windowId });
+  } catch (error) {
+    console.error("[Explorer Extension] Failed to save windowId to storage:", error);
+  }
+}
+async function loadTaskWindowId() {
+  if (!isStorageAvailable()) return null;
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.TASK_WINDOW_ID);
+    const savedWindowId = result[STORAGE_KEYS.TASK_WINDOW_ID];
+    if (savedWindowId === void 0 || savedWindowId === null) {
+      return null;
+    }
+    try {
+      await chrome.windows.get(savedWindowId);
+      console.log("[Explorer Extension] Loaded existing windowId from storage:", savedWindowId);
+      return savedWindowId;
+    } catch {
+      console.log("[Explorer Extension] Window no longer exists, clearing storage");
+      await chrome.storage.local.set({ [STORAGE_KEYS.TASK_WINDOW_ID]: null });
+      return null;
+    }
+  } catch (error) {
+    console.error("[Explorer Extension] Failed to load windowId from storage:", error);
+    return null;
+  }
+}
 async function createTaskWindow() {
   await closeTaskWindow();
   return new Promise((resolve) => {
@@ -130,9 +162,10 @@ async function createTaskWindow() {
         url: "about:blank",
         focused: true
       },
-      (window) => {
+      async (window) => {
         if (window && window.id) {
           currentTaskWindowId = window.id;
+          await saveTaskWindowId(window.id);
           console.log("[Explorer Extension] Created task window:", window.id);
           resolve(window.id);
         } else {
@@ -152,12 +185,14 @@ async function closeTaskWindow() {
       console.log("[Explorer Extension] Window already closed or error:", error);
     }
     currentTaskWindowId = null;
+    await saveTaskWindowId(null);
   }
 }
 async function startPolling() {
   if (isPolling) return;
+  currentTaskWindowId = await loadTaskWindowId();
   isPolling = true;
-  console.log("[Explorer Extension] Starting poll loop");
+  console.log("[Explorer Extension] Starting poll loop", { restoredWindowId: currentTaskWindowId });
   await attemptPickup();
   pollLoopRecursive();
 }
@@ -176,20 +211,58 @@ async function pollLoopRecursive() {
     setTimeout(pollLoopRecursive, config.pollIntervalMs);
   }
 }
-async function attemptPickup() {
-  if (currentTaskId && (pendingCommandId || isProcessingCycle)) {
+async function handleTaskCompletion(taskId, taskStatus) {
+  if (taskStatus === "complete" || taskStatus === "failed") {
+    console.log(`[Explorer Extension] Task ${taskId} is ${taskStatus} - cleaning up`);
+    currentTaskId = null;
+    await closeTaskWindow();
     return true;
   }
-  await closeTaskWindow();
+  return false;
+}
+async function attemptPickup() {
+  if (currentTaskId && (pendingCommandId || isProcessingCycle)) {
+    console.log("[Explorer Extension] Skipping pickup - already processing task:", currentTaskId);
+    return true;
+  }
   const pickupResult = await pickupTask();
   if (pickupResult) {
     if (pickupResult.pickedUp || pickupResult.alreadyProcessing) {
-      currentTaskId = pickupResult.task?.id ?? null;
-      console.log("[Explorer Extension] Picked up task:", currentTaskId);
-      await createTaskWindow();
+      const newTaskId = pickupResult.task?.id ?? null;
+      const taskStatus = pickupResult.task?.status ?? null;
+      if (currentTaskId === null) {
+        currentTaskId = newTaskId;
+      }
+      const isSameTask = currentTaskId === newTaskId;
+      console.log("[Explorer Extension] Pickup result:", {
+        pickedUp: pickupResult.pickedUp,
+        alreadyProcessing: pickupResult.alreadyProcessing,
+        taskId: newTaskId,
+        taskStatus,
+        sameTask: isSameTask,
+        hadWindowId: currentTaskWindowId
+      });
+      if (await handleTaskCompletion(newTaskId, taskStatus)) {
+        return false;
+      }
+      if (!isSameTask) {
+        console.log("[Explorer Extension] isSameTask - ", currentTaskId, newTaskId);
+        console.log("[Explorer Extension] Different task - closing existing window");
+        await closeTaskWindow();
+      } else if (currentTaskWindowId) {
+        console.log("[Explorer Extension] Same task - reusing existing window:", currentTaskWindowId);
+      }
+      currentTaskId = newTaskId;
+      if (!currentTaskWindowId) {
+        console.log("[Explorer Extension] No existing window - creating new one");
+        await createTaskWindow();
+      }
       return true;
     } else {
       console.log("[Explorer Extension] No pending tasks");
+      if (currentTaskId) {
+        await closeTaskWindow();
+      }
       currentTaskId = null;
     }
   }
@@ -293,6 +366,13 @@ async function executeCommands(commands) {
   return results;
 }
 async function getTaskWindowTab() {
+  let tab = await queryTaskWindowTab();
+  if (tab) return tab;
+  await createTaskWindow();
+  tab = await queryTaskWindowTab();
+  return tab;
+}
+async function queryTaskWindowTab() {
   if (!currentTaskWindowId) {
     const windows = await chrome.windows.getAll({ populate: true });
     for (const win of windows) {
@@ -452,22 +532,27 @@ async function executeJs(params, requestId) {
     const timeoutId = setTimeout(() => resolve(makeJsTimeoutResult(requestId)), JS_EXECUTION_TIMEOUT_MS);
     chrome.scripting.executeScript({
       target: { tabId },
-      func: (script, args) => {
+      world: "MAIN",
+      // Execute in the actual page context
+      func: (script) => {
         const logs = [];
         const originalLog = console.log;
         console.log = (...a) => {
           logs.push(a.map(String).join(" "));
         };
         try {
-          const result = new Function("args", `with(args) { return eval(${JSON.stringify(script)}); }`)(args || {});
+          const el = document.createElement("script");
+          el.textContent = script;
+          (document.head || document.documentElement).appendChild(el);
+          el.remove();
           console.log = originalLog;
-          return { success: true, output: logs.join("\n").slice(0, 1e3) || (result !== void 0 ? String(result).slice(0, 1e3) : ""), duration: 0 };
+          return { success: true, output: logs.join("\n").slice(0, 1e3) || "Script executed", duration: 0 };
         } catch (error) {
           console.log = originalLog;
           return { success: false, error: error instanceof Error ? error.message : String(error), output: logs.join("\n").slice(0, 1e3), duration: 0 };
         }
       },
-      args: [params.script, params.args || {}]
+      args: [params.script]
     }).then((results) => {
       clearTimeout(timeoutId);
       const result = results[0]?.result;
