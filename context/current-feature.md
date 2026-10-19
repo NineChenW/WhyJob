@@ -13,19 +13,30 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature
+# Current Feature: RAG Pipeline 02 - Ingest Corpus
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-- 
+- Create `rag/02-ingest.ts`: read all `.md` files from `/Users/luckyjay_hu/ai_workdir/CreateResume` under `context/**/*.md`, `docs/**/*.md`, `ckb/**/*.md` (configurable base path; corpus currently 118 files)
+- Split each file with LangChain `RecursiveCharacterTextSplitter` at `chunkSize: 800, chunkOverlap: 100` (tuning deferred to Phase 4)
+- Attach per-chunk metadata: `source` (relative path), `heading` (nearest markdown heading), `type` (`context` | `docs` | `ckb`)
+- Create `rag_chunks` table on Neon with pgvector: `id bigserial pk`, `content text`, `embedding vector(1536)`, `source text`, `heading text`, plus HNSW index `USING hnsw (embedding vector_cosine_ops)`; enable `CREATE EXTENSION IF NOT EXISTS vector;`
+- Embed every chunk with the same model as Phase 1 (NVIDIA `nemotron-3-embed-1b`, same `input_type` — never mix embedding models); surface a clear error on dimension mismatch instead of inserting bad rows
+- Insert in batches of ~50 rows per transaction; log `files → chunks` counts plus model name and `input_type`
 
 ## Notes
 
-- 
+- Spec: `context/features/rag-pipeline-02-ingest-spec.md`
+- Plan: `docs/rag-pipeline-execution-plan.md` (Section 4, Phase 2)
+- Reuse embedding client + `input_type` findings from `rag/01-explore-embeddings.ts` (Phase 1: `input_type='query'` required for meaningful contrast)
+- Checkpoint before Phase 3: ~100-400 chunks inserted; spot-check 3 rows for content/source match; can answer "why 800/100 and not 8000/0?"
+- Troubleshooting: `type "vector" does not exist` → run `CREATE EXTENSION vector;` on the connected branch; all similarities ~0.5 → embedding call returned empty strings, log vector length + first values
+- Out of scope: retrieval loop (Phase 3), eval/tuning (Phase 4), cleanup (Phase 5), UI
+- Note: plan's `rag_chunks` DDL has no `type` column even though chunk metadata carries `type` — encode in `source` or derive later unless specified otherwise
 
 
 
