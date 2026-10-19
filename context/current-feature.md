@@ -13,35 +13,25 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature: RAG Pipeline 02 - Ingest Corpus
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Create `rag/02-ingest.ts`: read all `.md` files from `/Users/luckyjay_hu/ai_workdir/CreateResume` under `context/**/*.md`, `docs/**/*.md`, `ckb/**/*.md` (configurable base path; corpus currently 118 files)
-- Split each file with LangChain `RecursiveCharacterTextSplitter` at `chunkSize: 800, chunkOverlap: 100` (tuning deferred to Phase 4)
-- Attach per-chunk metadata: `source` (relative path), `heading` (nearest markdown heading), `type` (`context` | `docs` | `ckb`)
-- Create `rag_chunks` table on Neon with pgvector: `id bigserial pk`, `content text`, `embedding vector(1536)`, `source text`, `heading text`, plus HNSW index `USING hnsw (embedding vector_cosine_ops)`; enable `CREATE EXTENSION IF NOT EXISTS vector;`
-- Embed every chunk with the same model as Phase 1 (NVIDIA `nemotron-3-embed-1b`, same `input_type` — never mix embedding models); surface a clear error on dimension mismatch instead of inserting bad rows
-- Insert in batches of ~50 rows per transaction; log `files → chunks` counts plus model name and `input_type`
+-
 
 ## Notes
 
-- Spec: `context/features/rag-pipeline-02-ingest-spec.md`
-- Plan: `docs/rag-pipeline-execution-plan.md` (Section 4, Phase 2)
-- Reuse embedding client + `input_type` findings from `rag/01-explore-embeddings.ts` (Phase 1: `input_type='query'` required for meaningful contrast)
-- Checkpoint before Phase 3: ~100-400 chunks inserted; spot-check 3 rows for content/source match; can answer "why 800/100 and not 8000/0?"
-- Troubleshooting: `type "vector" does not exist` → run `CREATE EXTENSION vector;` on the connected branch; all similarities ~0.5 → embedding call returned empty strings, log vector length + first values
-- Out of scope: retrieval loop (Phase 3), eval/tuning (Phase 4), cleanup (Phase 5), UI
-- Note: plan's `rag_chunks` DDL has no `type` column even though chunk metadata carries `type` — encode in `source` or derive later unless specified otherwise
+-
 
 
 
 ## History
 
+- **2026-10-19**: RAG Pipeline 02 - Ingest Corpus - Created rag/02-ingest.ts: reads CreateResume markdown corpus (119 files across context/docs/ckb), splits by markdown headings then RecursiveCharacterTextSplitter at 800/100, embeds with NVIDIA nemotron-3-embed-1b (input_type='query', dim 2048), inserts into rag_chunks on Neon pgvector with halfvec HNSW cosine index. As-built corrections: vector(2048) not 1536 (measured dimension); HNSW on vector caps at 2000 dims so index uses halfvec expression indexing — phase 3 must mirror the cast in ORDER BY. 119 files -> 2964 chunks inserted, 3-row spot-check passes, 98 tests pass, build passes.
 - **2026-10-18**: RAG Pipeline 01 - Explore Embeddings - Created rag/01-explore-embeddings.ts standalone script: embeds 5 sample strings via NVIDIA nemotron-3-embed-1b (OpenAI-compatible endpoint), prints vector length + first 8 values, 5x5 cosine-similarity matrix with hand-written helper. Key finding: input_type='query' required for meaningful contrast (payment pair 0.87, cross-topic ~0.1); phases 2-3 must reuse same model + input_type. Build passes, 98 tests pass.
 - **2026-06-29**: Explorer Extension Protocol Alignment (Iteration 13) - Updated commands/results APIs to use proper PollResponse/ResultPayload types from explorer-extension. Created shared types in src/lib/http/explorer-types.ts. Test page now properly tests extension polling pattern. Build passes, 96 tests pass.
 - **2026-06-29**: Explorer Extension Refactor - Refactored service-worker.ts to meet code quality standards: each method shows clear process steps, each step with sub-methods or ≤3 lines. Added command handler map, navigation helpers, network filter helpers, content script caller, and polling loop helpers. Build passes, tests pass.
