@@ -13,37 +13,27 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature: RAG Pipeline 03 - Retrieval Loop (Ask)
+# Current Feature
+
+<!-- Feature name goes here when active, e.g. # Current Feature: Add Navbar -->
 
 ## Status
 
-In Progress
+Not Start
 
 ## Goals
 
-- Create `rag/03-ask.ts` standalone script (`npx tsx --env-file=.env rag/03-ask.ts "question"`); question from argv, print usage and exit if missing
-- Keep retrieval (embed → SQL top-5) separable from answer generation so Phase 4 eval can call just retrieval
-- Query embedding: same NVIDIA `nemotron-3-embed-1b`, `input_type: 'query'`, dim 2048; extract shared helpers into `rag/lib/embeddings.ts` only if it avoids duplication (no over-refactor; Phase 5 does cleanup)
-- Retrieval via pgvector cosine distance on Neon: top-5 by `embedding::halfvec(2048) <=> $query::halfvec(2048)` (mirror Phase 2 cast so HNSW index is used); log rank, source, heading, similarity (4 decimals); guard for empty `rag_chunks` / 0 rows
-- Prompt in three layers, in order: (1) instructions with refuse rule ("Not in the knowledge base."), (2) context chunks labeled `[1] path :: heading` ... `[5]`, (3) question verbatim — refuse rule must sit above the context
-- Answer via existing OpenAI-compatible client (chat model name from Phase 1 work, as a constant); Zod-validate `{ answer, citations }` (indices into [1]..[5]); on validation failure retry once or fail clearly
-- Print question, cited answer, and citations resolved to `source :: heading`
-- Manual test with 5 questions: easy (DevStash rate-limiting), cross-file (Zuul gateways), absent-topic control (2027 revenue plan → must refuse), plus 2 self-chosen spanning corpus dirs
+<!-- Goals of the current feature as bullet points -->
 
 ## Notes
 
-- Spec: `context/features/rag-pipeline-03-ask-spec.md`
-- Plan: `docs/rag-pipeline-execution-plan.md` (Section 5, Phase 3)
-- Phase 2 script `rag/02-ingest.ts`: embedding constants, `toVectorLiteral`, halfvec cast comment at lines 169-175 (HNSW on `vector` caps at 2000 dims; index is on `embedding::halfvec(2048)` — query must cast the same way or index is ignored)
-- Phase 1 script `rag/01-explore-embeddings.ts`: embedding client + `input_type='query'` findings, cosine helper; check it for the chat model convention
-- `1 - distance` = similarity for `<=>`
-- Out of scope: eval set / recall@5 / tuning (Phase 4); README, refactor into lib (Phase 5); agent-tool wiring (Phase 5); no streaming, no conversation memory
-- Checkpoint before Phase 4: easy Q correct with right citation; control Q refuses; prompt layers explained; similarities differentiated (~0.7+ for on-topic, low for irrelevant)
+<!-- Additional context, constraints, or details from spec -->
 
 
 
 ## History
 
+- **2026-10-22**: RAG Pipeline 03 - Retrieval Loop (Ask) - Created rag/03-ask.ts: argv question with usage guard, empty-rag_chunks guard, top-5 retrieval via pgvector cosine distance with the halfvec(2048) cast (HNSW index used), three-layer prompt with refuse rule above context, cited JSON answer, citations printed resolved to source :: heading. Extracted rag/lib/embeddings.ts (shared nemotron-3-embed-1b client, input_type='query', dim 2048 guard) and rag/lib/ask.ts (buildPrompt, parseStructuredAnswer with Zod {answer, citations} capped [1..5], generateAnswer with JSON mode + one retry) — pure logic unit-tested (21 new tests). As-built correction: NVIDIA retired meta/llama-3.3-70b-instruct (410 Gone), chat model switched to nvidia/nemotron-3-super-120b-a12b (JSON mode, reasoning model needing larger max_tokens); provider defaults updated. vitest includes rag/**/*.test.ts. Retrieval kept separable from answer generation for Phase 4 eval. 119 tests pass, build passes.
 - **2026-10-19**: RAG Pipeline 02 - Ingest Corpus - Created rag/02-ingest.ts: reads CreateResume markdown corpus (119 files across context/docs/ckb), splits by markdown headings then RecursiveCharacterTextSplitter at 800/100, embeds with NVIDIA nemotron-3-embed-1b (input_type='query', dim 2048), inserts into rag_chunks on Neon pgvector with halfvec HNSW cosine index. As-built corrections: vector(2048) not 1536 (measured dimension); HNSW on vector caps at 2000 dims so index uses halfvec expression indexing — phase 3 must mirror the cast in ORDER BY. 119 files -> 2964 chunks inserted, 3-row spot-check passes, 98 tests pass, build passes.
 - **2026-10-18**: RAG Pipeline 01 - Explore Embeddings - Created rag/01-explore-embeddings.ts standalone script: embeds 5 sample strings via NVIDIA nemotron-3-embed-1b (OpenAI-compatible endpoint), prints vector length + first 8 values, 5x5 cosine-similarity matrix with hand-written helper. Key finding: input_type='query' required for meaningful contrast (payment pair 0.87, cross-topic ~0.1); phases 2-3 must reuse same model + input_type. Build passes, 98 tests pass.
 - **2026-06-29**: Explorer Extension Protocol Alignment (Iteration 13) - Updated commands/results APIs to use proper PollResponse/ResultPayload types from explorer-extension. Created shared types in src/lib/http/explorer-types.ts. Test page now properly tests extension polling pattern. Build passes, 96 tests pass.
