@@ -145,7 +145,7 @@ const OPENAI_MODELS: ModelConfig[] = [
 const NVIDIA_MODELS: ModelConfig[] = [
   {
     provider: 'nvidia',
-    modelId: 'meta/llama-3.3-70b-instruct',
+    modelId: 'nvidia/nemotron-3-super-120b-a12b',
     name: 'Llama 3.3 70B',
     temperature: 0.3,
     maxTokens: 1024,
@@ -203,7 +203,7 @@ export const PROVIDER_CONFIGS: Record<AIProviderType, ProviderConfig> = {
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     apiKeyEnvVar: 'NVIDIA_API_KEY',
     enabled: !!process.env.NVIDIA_API_KEY,
-    defaultModel: 'meta/llama-3.3-70b-instruct',
+    defaultModel: 'nvidia/nemotron-3-super-120b-a12b',
     models: NVIDIA_MODELS,
   },
 };
@@ -224,7 +224,7 @@ export const DEFAULT_MODELS: Record<AIProviderType, string> = {
   groq: 'llama-3.3-70b-versatile',
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o',
-  nvidia: 'meta/llama-3.3-70b-instruct',
+  nvidia: 'nvidia/nemotron-3-super-120b-a12b',
 };
 
 /**
@@ -232,7 +232,7 @@ export const DEFAULT_MODELS: Record<AIProviderType, string> = {
  */
 export const EXPLORER_MODEL_CONFIG = {
   provider: 'nvidia' as AIProviderType,
-  model: 'meta/llama-3.3-70b-instruct',
+  model: 'nvidia/nemotron-3-super-120b-a12b',
   temperature: 0.3,
   maxTokens: 1024,
 };

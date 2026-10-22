@@ -48,7 +48,7 @@ export class NvidiaProvider implements AIProvider {
   async createCompletion(params: AICompletionParams): Promise<AICompletionResult> {
     const client = getNvidiaClient();
     // Default to Llama 3.3 70B Instruct for free tier
-    const model = params.model ?? 'meta/llama-3.3-70b-instruct';
+    const model = params.model ?? 'nvidia/nemotron-3-super-120b-a12b';
 
     try {
       const completion = await client.chat.completions.create({

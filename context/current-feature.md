@@ -13,19 +13,32 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature
+# Current Feature: RAG Pipeline 03 - Retrieval Loop (Ask)
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
--
+- Create `rag/03-ask.ts` standalone script (`npx tsx --env-file=.env rag/03-ask.ts "question"`); question from argv, print usage and exit if missing
+- Keep retrieval (embed → SQL top-5) separable from answer generation so Phase 4 eval can call just retrieval
+- Query embedding: same NVIDIA `nemotron-3-embed-1b`, `input_type: 'query'`, dim 2048; extract shared helpers into `rag/lib/embeddings.ts` only if it avoids duplication (no over-refactor; Phase 5 does cleanup)
+- Retrieval via pgvector cosine distance on Neon: top-5 by `embedding::halfvec(2048) <=> $query::halfvec(2048)` (mirror Phase 2 cast so HNSW index is used); log rank, source, heading, similarity (4 decimals); guard for empty `rag_chunks` / 0 rows
+- Prompt in three layers, in order: (1) instructions with refuse rule ("Not in the knowledge base."), (2) context chunks labeled `[1] path :: heading` ... `[5]`, (3) question verbatim — refuse rule must sit above the context
+- Answer via existing OpenAI-compatible client (chat model name from Phase 1 work, as a constant); Zod-validate `{ answer, citations }` (indices into [1]..[5]); on validation failure retry once or fail clearly
+- Print question, cited answer, and citations resolved to `source :: heading`
+- Manual test with 5 questions: easy (DevStash rate-limiting), cross-file (Zuul gateways), absent-topic control (2027 revenue plan → must refuse), plus 2 self-chosen spanning corpus dirs
 
 ## Notes
 
--
+- Spec: `context/features/rag-pipeline-03-ask-spec.md`
+- Plan: `docs/rag-pipeline-execution-plan.md` (Section 5, Phase 3)
+- Phase 2 script `rag/02-ingest.ts`: embedding constants, `toVectorLiteral`, halfvec cast comment at lines 169-175 (HNSW on `vector` caps at 2000 dims; index is on `embedding::halfvec(2048)` — query must cast the same way or index is ignored)
+- Phase 1 script `rag/01-explore-embeddings.ts`: embedding client + `input_type='query'` findings, cosine helper; check it for the chat model convention
+- `1 - distance` = similarity for `<=>`
+- Out of scope: eval set / recall@5 / tuning (Phase 4); README, refactor into lib (Phase 5); agent-tool wiring (Phase 5); no streaming, no conversation memory
+- Checkpoint before Phase 4: easy Q correct with right citation; control Q refuses; prompt layers explained; similarities differentiated (~0.7+ for on-topic, low for irrelevant)
 
 
 

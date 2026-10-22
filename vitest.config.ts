@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'rag/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/lib/ai/**/*.ts'],
