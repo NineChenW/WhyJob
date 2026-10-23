@@ -13,36 +13,25 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature: RAG Pipeline 04 - Measure and Tune (Eval)
+# Current Feature
 
 <!-- Feature name goes here when active, e.g. # Current Feature: Add Navbar -->
 
 ## Status
 
-In Progress
+Not Start
 
 ## Goals
 
-- Build a hand-written eval set `rag/04-eval-set.json`: 10 question/expected-source pairs (7 answerable across context/docs/ckb with varied difficulty, 3 should-refuse with `expectedSource: null` + `shouldRefuse: true`)
-- Create standalone eval script `rag/04-evaluate.ts` (`npx tsx --env-file=.env rag/04-evaluate.ts`): reuse the Phase 3 retrieval path (nemotron-3-embed-1b, input_type='query', dim 2048, halfvec(2048) cast both sides, top-K=5); hit = any retrieved chunk source matches expected source
-- Run the full Phase 3 ask path (LLM + refuse rule) for the 3 should-refuse questions only; pass = answer is exactly the refuse phrasing
-- Log per-question results (question, hit/miss or refuse-pass/fail, best similarity) and summary line `recall@5: N/7 answerable, refusals: N/3 correct`
-- Extract minimal shared `rag/lib/retrieval.ts` if `rag/03-ask.ts` doesn't cleanly expose retrieval (no deeper refactor — Phase 5 does cleanup)
-- Tune one variable at a time, re-running the full eval after each change: chunkSize 800→400→1200 (requires re-ingest + re-embed), top-K 5→3→8, with/without chunkOverlap
-- Pick the winning configuration, re-run eval on it one final time, record final numbers
+<!-- Goals of the current feature as bullet points -->
 
 ## Notes
 
-- Spec: `context/features/rag-pipeline-04-eval-spec.md`; Plan: `docs/rag-pipeline-execution-plan.md` (Section 6, Phase 4)
-- Builds on Phase 3 (`rag/03-ask.ts`) — eval reuses only the retrieval half; no LLM answer generation for the 7 answerable questions
-- Match rule for expected source (exact path or unambiguous fragment) must be defined in the script and kept simple
-- Re-ingest at chunkSize/overlap changes = clear `rag_chunks` then re-run `rag/02-ingest.ts` (~2964 chunks per run, budget API cost, don't sweep the grid blindly)
-- Checkpoint: at least one tuning move measurably improved recall; explain why it won (chunk granularity vs context dilution); 3 refusals pass on winning config; final numbers ready for README (Phase 5)
-- Troubleshooting: no tuning improvement → eval set too easy, add harder cross-file questions; refusal answers anyway → keep instructions above context, verify control question has no source; similarities all ~0.5 → embedding call returned empty strings, log vector length + first values
-- Out of scope: README/tag/cleanup (Phase 5), refactor into ingest/ask/evaluate + full lib/ (Phase 5), agent-tool wiring, metrics beyond recall@5 + refusal correctness, CI wiring
+<!-- Additional context, constraints, or details from spec -->
 
 ## History
 
+- **2026-10-23**: RAG Pipeline 04 - Measure and Tune (Eval) - Created rag/04-eval-set.json (10 hand-written pairs: 7 answerable across context/docs/ckb with one cross-file miss-maker, 3 should-refuse) and rag/04-evaluate.ts (retrieval-only eval for answerables, full ask path for refusals, topK argv override, per-question HIT/MISS-PASS/FAIL with best similarity + summary line). Extracted rag/lib/retrieval.ts (retrieveTopK/assertChunksExist from 03-ask.ts, topK-parameterized, halfvec cast preserved) so eval and ask share one retrieval path; 02-ingest.ts gained CHUNK_SIZE/CHUNK_OVERLAP env overrides for tuning re-ingests. rag/lib/eval.ts + 15 tests: parseEvalSet (Zod cross-field rules), sourceMatches (substring match rule), evaluateRefusal (exact refuse-phrase check), summarizeResults. Tuning results (11 runs): baseline 800/100/5 = 6/7; topK 8 = 7/7 (win #1); 400/100 = 7/7 at topK 5 and 3 (win #2); 1200 regressed 6/7 at topK 5/3; 400/0 = 7/7 at topK 5 and 3. Winner: chunkSize 400, overlap 0, topK 5 -> recall 7/7, refusals 3/3; why it won — smaller chunks keep the Fingo employment record's own text distinctive (similarity 0.63 vs 0.53 at 800) instead of diluting it into project content, and overlap 0 matched 400/100 quality with 5233 vs 5404 chunks (cheaper ingest). As-built correction: nemotron-3-super-120b-a12b stopped resolving for this NVIDIA account (404 function-not-provisioned, still listed in /models); chat model switched to nvidia/nemotron-3-ultra-550b-a55b (JSON mode + verbatim refusal verified) in both 03-ask.ts and 04-evaluate.ts. 134 tests pass, build passes.
 - **2026-10-22**: RAG Pipeline 03 - Retrieval Loop (Ask) - Created rag/03-ask.ts: argv question with usage guard, empty-rag_chunks guard, top-5 retrieval via pgvector cosine distance with the halfvec(2048) cast (HNSW index used), three-layer prompt with refuse rule above context, cited JSON answer, citations printed resolved to source :: heading. Extracted rag/lib/embeddings.ts (shared nemotron-3-embed-1b client, input_type='query', dim 2048 guard) and rag/lib/ask.ts (buildPrompt, parseStructuredAnswer with Zod {answer, citations} capped [1..5], generateAnswer with JSON mode + one retry) — pure logic unit-tested (21 new tests). As-built correction: NVIDIA retired meta/llama-3.3-70b-instruct (410 Gone), chat model switched to nvidia/nemotron-3-super-120b-a12b (JSON mode, reasoning model needing larger max_tokens); provider defaults updated. vitest includes rag/**/*.test.ts. Retrieval kept separable from answer generation for Phase 4 eval. 119 tests pass, build passes.
 - **2026-10-19**: RAG Pipeline 02 - Ingest Corpus - Created rag/02-ingest.ts: reads CreateResume markdown corpus (119 files across context/docs/ckb), splits by markdown headings then RecursiveCharacterTextSplitter at 800/100, embeds with NVIDIA nemotron-3-embed-1b (input_type='query', dim 2048), inserts into rag_chunks on Neon pgvector with halfvec HNSW cosine index. As-built corrections: vector(2048) not 1536 (measured dimension); HNSW on vector caps at 2000 dims so index uses halfvec expression indexing — phase 3 must mirror the cast in ORDER BY. 119 files -> 2964 chunks inserted, 3-row spot-check passes, 98 tests pass, build passes.
 - **2026-10-18**: RAG Pipeline 01 - Explore Embeddings - Created rag/01-explore-embeddings.ts standalone script: embeds 5 sample strings via NVIDIA nemotron-3-embed-1b (OpenAI-compatible endpoint), prints vector length + first 8 values, 5x5 cosine-similarity matrix with hand-written helper. Key finding: input_type='query' required for meaningful contrast (payment pair 0.87, cross-topic ~0.1); phases 2-3 must reuse same model + input_type. Build passes, 98 tests pass.
