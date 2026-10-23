@@ -17,28 +17,10 @@
  * Retrieval note: uses lib/retrieval.ts extracted from 03-ask.ts so the eval
  * measures the exact ask-path retrieval (nemotron-3-embed-1b, input_type
  * 'query', dim 2048, ::halfvec(2048) casts both sides → HNSW index used).
- * 
- * 
- 
-How It All Connects
- 
-04-eval-set.json ──► 04-evaluate.ts ──► lib/eval.ts (parse, match rule, refusal check, summary)
-                            │
-                            ├──► lib/retrieval.ts (embed query → pgvector halfvec top-K)  ◄── shared with 03-ask.ts
-                            └──► lib/ask.ts (buildPrompt + generateAnswer, refusals only)
-02-ingest.ts (env-tunable chunkSize/overlap) ──► rag_chunks ◄── queried by retrieval.ts
-
-The eval reuses Phase 3's retrieval and answer generation rather than duplicating them, so any number it produces describes the real ask path. Tuning changes one variable per run — chunkSize via env-override re-ingest, top-K via argv — and the results table gets a new row per run.
-
-Results so far (baseline → now):
-
-Run	chunkSize	overlap	top-K	recall	refusals
-baseline	800	100	5	6/7	3/3
-tune 2	800	100	8	7/7	3/3
-tune 3	400	100	5	7/7	3/3
-tune 4	400	100	3	7/7	3/3
-tune 5	1200	100	5	6/7	3/3
-Two measurable wins recorded: top-K 5→8, and chunkSize 800→400 — both fix Q6 (the cross-file Fingo employment question). Why 400 wins: smaller chunks keep the employment record's own text distinctive (higher similarity to its query — 0.63 vs 0.53 at 800) instead of being diluted by neighboring project content; 1200 does the opposite and regresses. A no-overlap run at 400 is re-ingesting now; then I'll pick the winner, do the final confirmation run, and record final numbers.
+ *
+ * The eval reuses Phase 3's retrieval and answer generation rather than
+ * duplicating them, so any number it produces describes the real ask path.
+ * Final tuned numbers live in rag/README.md.
  */
 
 import { readFile } from 'node:fs/promises';
