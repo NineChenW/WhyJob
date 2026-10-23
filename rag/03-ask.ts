@@ -44,24 +44,17 @@ Shared embedding helpers extracted per the goal ("only if it avoids duplication"
  * 
  */
 
-import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { neon } from '@neondatabase/serverless';
 import OpenAI from 'openai';
-import {
-  createEmbeddingClient,
-  embedTexts,
-} from './lib/embeddings';
-import {
-  buildPrompt,
-  generateAnswer,
-  type RetrievedChunk,
-} from './lib/ask';
+import { createEmbeddingClient } from './lib/embeddings';
+import { buildPrompt, generateAnswer, type RetrievedChunk } from './lib/ask';
+import { assertChunksExist, retrieveTopK } from './lib/retrieval';
 
-// meta/llama-3.3-70b-instruct (the project's old NVIDIA default) was retired by
-// NVIDIA (410 Gone); nemotron-3-super-120b-a12b is the current chat model that
-// supports JSON mode on the same endpoint, and pairs with the nemotron embedder.
-const CHAT_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
-
-type NeonSql = NeonQueryFunction<false, false>;
+// Chat model history: meta/llama-3.3-70b-instruct was retired by NVIDIA (410
+// Gone); its replacement nemotron-3-super-120b-a12b later stopped resolving
+// for this account (404, function not provisioned) — nemotron-3-ultra-550b-a55b
+// is the current model that works with JSON mode and honors the refuse rule.
+const CHAT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
 
 /** Exit with usage when no question was provided on argv. */
 function resolveQuestion(): string {
@@ -71,38 +64,6 @@ function resolveQuestion(): string {
     process.exit(1);
   }
   return question;
-}
-
-/**
- * Retrieve the top-K chunks by cosine distance. The `::halfvec(2048)` casts
- * mirror the HNSW expression index from phase 2 — without them the index is
- * ignored (vector-index dims cap at 2000; halfvec allows 4000).
- */
-async function retrieveTopK(sql: NeonSql, client: OpenAI, question: string): Promise<RetrievedChunk[]> {
-  const [queryVector] = await embedTexts(client, [question]);
-  const queryLiteral = `[${queryVector.join(',')}]`;
-  const rows = await sql`
-    SELECT content, source, heading,
-           1 - (embedding::halfvec(2048) <=> ${queryLiteral}::halfvec(2048)) AS similarity
-    FROM rag_chunks
-    ORDER BY embedding::halfvec(2048) <=> ${queryLiteral}::halfvec(2048)
-    LIMIT 5
-  `;
-  return rows.map((row) => ({
-    content: row.content as string,
-    source: row.source as string,
-    heading: row.heading as string,
-    similarity: Number(row.similarity),
-  }));
-}
-
-/** Guard: retrieval only makes sense when phase 2 has populated the table. */
-async function assertChunksExist(sql: NeonSql): Promise<void> {
-  const [row] = await sql`SELECT count(*)::int AS count FROM rag_chunks`;
-  if (Number(row.count) === 0) {
-    console.error('rag_chunks is empty — run phase 2 first: npx tsx --env-file=.env rag/02-ingest.ts');
-    process.exit(1);
-  }
 }
 
 /** Print each retrieved chunk: rank, source, heading, similarity. */

@@ -27,8 +27,10 @@ const EMBED_DIM = 2048;
 
 const DEFAULT_CORPUS_ROOT = '/Users/luckyjay_hu/ai_workdir/CreateResume';
 const CORPUS_DIRS = ['context', 'docs', 'ckb'] as const;
-const CHUNK_SIZE = 800;
-const CHUNK_OVERLAP = 100;
+// Phase-4 tuning: override via env (CHUNK_SIZE=400 ...) so each tuning run
+// re-ingests without editing the script. Defaults are the phase-2 baseline.
+const CHUNK_SIZE = Number(process.env.CHUNK_SIZE ?? 800);
+const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP ?? 100);
 const EMBED_BATCH_SIZE = 64;
 const INSERT_BATCH_SIZE = 50;
 
@@ -233,6 +235,7 @@ async function main(): Promise<void> {
   );
 
   console.log(`Model: ${EMBEDDING_MODEL}, input_type: ${EMBEDDING_INPUT_TYPE}, dim: ${EMBED_DIM}`);
+  console.log(`Chunking: size ${CHUNK_SIZE}, overlap ${CHUNK_OVERLAP}`);
   console.log(`Done: ${files.length} files -> ${chunks.length} chunks`);
 }
 
