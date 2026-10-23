@@ -13,23 +13,33 @@ Do not violate any following rules:
 8. Update notes section with current feature references.
 9. Reset the file ready for next feature: set status to "Not Start"
 
-# Current Feature
+# Current Feature: RAG Pipeline 04 - Measure and Tune (Eval)
 
 <!-- Feature name goes here when active, e.g. # Current Feature: Add Navbar -->
 
 ## Status
 
-Not Start
+In Progress
 
 ## Goals
 
-<!-- Goals of the current feature as bullet points -->
+- Build a hand-written eval set `rag/04-eval-set.json`: 10 question/expected-source pairs (7 answerable across context/docs/ckb with varied difficulty, 3 should-refuse with `expectedSource: null` + `shouldRefuse: true`)
+- Create standalone eval script `rag/04-evaluate.ts` (`npx tsx --env-file=.env rag/04-evaluate.ts`): reuse the Phase 3 retrieval path (nemotron-3-embed-1b, input_type='query', dim 2048, halfvec(2048) cast both sides, top-K=5); hit = any retrieved chunk source matches expected source
+- Run the full Phase 3 ask path (LLM + refuse rule) for the 3 should-refuse questions only; pass = answer is exactly the refuse phrasing
+- Log per-question results (question, hit/miss or refuse-pass/fail, best similarity) and summary line `recall@5: N/7 answerable, refusals: N/3 correct`
+- Extract minimal shared `rag/lib/retrieval.ts` if `rag/03-ask.ts` doesn't cleanly expose retrieval (no deeper refactor — Phase 5 does cleanup)
+- Tune one variable at a time, re-running the full eval after each change: chunkSize 800→400→1200 (requires re-ingest + re-embed), top-K 5→3→8, with/without chunkOverlap
+- Pick the winning configuration, re-run eval on it one final time, record final numbers
 
 ## Notes
 
-<!-- Additional context, constraints, or details from spec -->
-
-
+- Spec: `context/features/rag-pipeline-04-eval-spec.md`; Plan: `docs/rag-pipeline-execution-plan.md` (Section 6, Phase 4)
+- Builds on Phase 3 (`rag/03-ask.ts`) — eval reuses only the retrieval half; no LLM answer generation for the 7 answerable questions
+- Match rule for expected source (exact path or unambiguous fragment) must be defined in the script and kept simple
+- Re-ingest at chunkSize/overlap changes = clear `rag_chunks` then re-run `rag/02-ingest.ts` (~2964 chunks per run, budget API cost, don't sweep the grid blindly)
+- Checkpoint: at least one tuning move measurably improved recall; explain why it won (chunk granularity vs context dilution); 3 refusals pass on winning config; final numbers ready for README (Phase 5)
+- Troubleshooting: no tuning improvement → eval set too easy, add harder cross-file questions; refusal answers anyway → keep instructions above context, verify control question has no source; similarities all ~0.5 → embedding call returned empty strings, log vector length + first values
+- Out of scope: README/tag/cleanup (Phase 5), refactor into ingest/ask/evaluate + full lib/ (Phase 5), agent-tool wiring, metrics beyond recall@5 + refusal correctness, CI wiring
 
 ## History
 

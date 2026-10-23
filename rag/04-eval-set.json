@@ -1,0 +1,54 @@
+{
+  "questions": [
+    {
+      "question": "How many users did the Fingo push notification platform reach, and within what time window?",
+      "expectedSource": "ckb/achievements/fingo-push-platform-scale.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "How should the top of a resume markdown file be structured (name, contact line, role title)?",
+      "expectedSource": "docs/RESUME_FORMAT.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "What are the expert's working principles for turning technical work into resume bullets?",
+      "expectedSource": "context/expert/EXPERT_BACKGROUND.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "When the WeChat Pay API field-set change broke supplier onboarding at ClouDr, what was the two-track response?",
+      "expectedSource": "ckb/achievements/wechat-pay-two-track-remediation.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "What is the central idea of the TDD approach for the AI resume system?",
+      "expectedSource": "docs/TDD-approach.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "Which employment record covers the Fingo push platform work, and what was the title progression there?",
+      "expectedSource": "ckb/employment/fingo-team-lead.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "What are the three stages of the ClouDr clearing and settlement system, and how are refunds handled in profit sharing?",
+      "expectedSource": "ckb/projects/cloudr-clearing-settlement.md",
+      "shouldRefuse": false
+    },
+    {
+      "question": "What is the company's 2027 revenue plan?",
+      "expectedSource": null,
+      "shouldRefuse": true
+    },
+    {
+      "question": "What salary does the candidate expect for their next role?",
+      "expectedSource": null,
+      "shouldRefuse": true
+    },
+    {
+      "question": "How many employees does Amazon currently have?",
+      "expectedSource": null,
+      "shouldRefuse": true
+    }
+  ]
+}
